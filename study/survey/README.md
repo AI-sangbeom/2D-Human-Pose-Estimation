@@ -30,9 +30,7 @@ H Chen, R Feng, S Wu, H Xu, F Zhou, Z Liu - Multimedia systems, 2023 - Springer
 <br>
 
 ## 2. Problem Statement
-> \
-**HPE 목표** : ***입력된 이미지 내의 모든 사람들의 포즈를 추론하는 것***\
-<br>
+**HPE 목표** : ***입력된 이미지 내의 모든 사람들의 포즈를 추론하는 것***
 
 #### Challenges
 1. 실제 환경에서는 과·소노출이나 사람-사물 얽힘과 같은 잡음 현상이 자주 발생하며, 이는 쉽게 탐지 실패로 이어질 수 있다.
@@ -53,20 +51,22 @@ Pose Estimation 네트워크 구조는 크게 2개 (**top-down, bottom-up**) 로
     1. 사람의 bounding box를 먼저 탐지
     2. 각 bounding box에 대해 단일 인물의 자세 추정을 수행함 
 
-**Top-Down Approaches**
-- regression-based
-- heatmap-based
-- video-based
-- model compressing-based
+- **Top-Down Approaches**
+  
+    - regression-based
+    - heatmap-based
+    - video-based
+    - model compressing-based
 
 #### Bottom-Up
 
     1. 이미지 내에서 모든 키포인트들을 검출
     2. 이후, 서로 다른 사람의 인스턴스로 그룹화 진행
 
-**Bottom-Up Approaches**
-- one stage
-- two stage
+- **Bottom-Up Approaches**
+  
+    - one stage
+    - two stage
 
 <br>
 

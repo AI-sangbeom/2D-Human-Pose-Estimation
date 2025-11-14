@@ -500,3 +500,270 @@ network
 - 이를 영상(frame sequence)에 그대로 적용하면 프레임 간 temporal consistency 무시하게 된다. 따라서 keypoint jitter, 좌표 불안정성 등의 문제 발생으로 이어진다. 
 
 - 이러한 문제를 해결하기 위해, 시간 정보를 활용하는 방식들이 연구되고 있다.
+
+<br>
+
+**비디오 기반 HPE 접근 방식**
+
+- Optical Flow
+
+    - 프레임 간 motion을 optical flow로 계산함.
+
+    - 키포인트 위치를 시간적으로 보정하거나 propagate함.
+
+    - 빠른 움직임 대응에 효과적임.
+
+- RNN
+
+    - LSTM/GRU 등 순환 구조로 프레임 시퀀스 모델링함.
+
+    - 장기적 temporal dependency 학습 가능함.
+
+- Pose Tracking
+
+    - 각 프레임에서 포즈 검출 후 사람·관절을 시간 축에서 추적함.
+
+    - 특히 멀티 Person에서 ID consistency 유지에 유리함.
+
+- Key Frame
+
+    - 전체 프레임을 다 정교하게 처리하지 않음.
+
+    - 중요한 key frame만 높은 정확도로 분석함.
+
+    - 나머지는 propagate하여 효율성 높임 → 실시간 환경에 적합함.
+
+<br>
+
+***1. Optical Flow***
+
+- Optical flow는 프레임 간 픽셀 단위의 겉보기 움직임(modeling apparent pixel motion)을 계산하는 기법임.
+
+- 인간의 움직임이 프레임 간 flow에 잘 드러나기 때문에 자세 추정에 유용함.
+
+- 다만 배경 변화나 노이즈도 함께 포함되기 때문에 이를 잘 다루는 것이 핵심임.
+
+- **주요 연구**
+
+    - Flowing convnets for human pose estimation in videos
+
+        - CNN + Optical Flow 결합
+
+        - CNN 특징과 optical flow를 하나의 프레임워크로 통합함.
+
+        - Flow field를 이용해 여러 프레임의 특징을 시간적으로 정렬(alignment)함.
+
+        - 정렬된 특징을 활용해 현재 프레임의 포즈 검출 성능을 높임.
+
+    - Thin slicing network: A deep structured model for pose estimation in videos
+
+        - Thin-Slicing Network
+
+        - 모든 인접 프레임 쌍에 대해 dense optical flow 계산함.
+
+        - 초기 joint 예측을 시간축으로 전달(propagation)함.
+
+        - Flow 기반 warping으로 heatmap을 정렬해 이후 spatiotemporal 추론에 사용함.
+
+    - Towards accurate human pose estimation in videos of crowded scenes
+
+        - Forward/Backward Pose Propagation
+
+        - 군중(crowded) 환경에 초점 맞춘 연구임.
+
+        - Forward propagation + backward propagation을 모두 사용해 현재 프레임의 포즈를 정교하게 보정함.
+
+    - Poseflow: A deep motion representation for understanding human behaviors in videos
+
+        - PoseFlow: Deep Motion Representation
+
+        - Optical flow가 배경 변화·잡음도 함께 포함하는 문제를 지적함.
+
+        - PoseFlow라는 강건한 motion representation 제안함.
+
+        - 배경 변화 억제
+
+        - 모션 블러 영향 감소
+
+        - HPE뿐 아니라 행동 인식(human action recognition) 에도 일반화 가능함.
+
+- **Optical Flow 방식의 한계**
+
+    - Optical flow는 픽셀 단위의 motion cue를 잘 제공함.
+
+    - 하지만 flow가 표현 가능한 움직임은 저수준(local, pixel-level) motion에 국한됨.
+
+    - 장기적 의존성(long-term dependency)이나 고수준 의미 정보는 부족함.
+
+<br>
+
+***2. Recurrent Neural Network***
+
+- Optical flow 외에도 RNN은 프레임 간 시간적 정보를 모델링하는 또 다른 방법임.
+
+- RNN은 시퀀스 예측에 강하며, 현재 출력이 현재 입력 + 과거 hidden state 에 의해 결정됨.
+
+- 이 특성 덕분에 영상 내 temporal context를 학습하는 데 적합함.
+
+- 여러 연구들이 RNN을 이용해 프레임 간 시간 정보를 포착하고 포즈 추정 성능을 향상시키고자 함.
+
+- **주요 연구**
+
+    - Chained predictions using convolutional neural networks
+
+        - Chained CNN으로 입력 이미지를 처리함.
+
+        - 이전 hidden state + 현재 프레임 이미지 → 현재 keypoint heatmap 예측함.
+
+        - 시간적 정보와 시각 특징을 함께 사용하는 구조임.
+
+    - Lstm pose machine
+
+        - Convolutional Pose Machine + ConvLSTM
+
+        - CPM(Convolutional Pose Machine)을 확장한 연구임.
+
+        - ConvLSTM을 도입해 공간적 특성과 시간적 특성 을 동시에 모델링함.
+
+        - 프레임 간 연속적인 포즈 변화 패턴을 학습할 수 있음.
+
+- **한계**
+
+    - 기존 RNN 기반 방법들은 단일 인물(single-person) 시퀀스 에서는 효과적임.
+
+    - 하지만 아직 Multi-Person 비디오에는 제대로 적용되지 않음.
+
+    - 이유는 다음과 같다고 추정
+
+        - 여러 사람이 등장하면 각 사람의 시간적 정보를 분리해 추출하기 어려움
+
+        - 서로의 움직임이 섞여 RNN이 temporal context를 정확하게 해석하기 힘듦
+
+
+<br>
+
+***3. Pose Tracking***
+
+- RNN이 멀티-퍼슨 비디오에서 시간 정보를 효과적으로 분리해 사용하기 어렵다는 한계를 보완하기 위해, pose tracking 기반 접근이 제안됨.
+
+- 기본 아이디어는 각 사람마다 tracklet(시간 축에서 이어지는 사람별 포즈 시퀀스) 을 생성하여, 다른 사람의 움직임 간섭을 줄이는 것임.
+
+- tracklet 기반으로 temporal 정보를 분석하면 단일 인물의 시간적 흐름을 안정적으로 파악할 수 있음.
+
+- **주요 연구**
+
+    - Detect-and-track: Efficient pose estimation in videos
+        
+        - 3D Mask R-CNN 기반 방법
+
+        - Mask R-CNN을 시간축으로 확장한 3D Mask R-CNN 제안함.
+
+        - 각 사람에 대해 짧은 클립(small clip) 생성함.
+
+        - 클립 내부의 temporal 정보를 활용해 더 정확한 포즈 예측 수행함.
+
+    - Temporal keypoint matching and refinement network for pose estimation and tracking
+
+        - Temporal Keypoint Matching + Refinement
+
+        - 두 단계 구성:
+
+            - Temporal keypoint matching : 프레임 간 keypoint 유사도를 기반으로 안정적인 single-person pose sequence 생성함.
+
+            - Temporal keypoint refinement : 시퀀스 내의 여러 포즈를 집계해 원래 포즈를 보정함.
+
+        - 결과적으로 시계열 기반 보정으로 정확도 상승함.
+
+    - Combining detection and tracking for human pose estimation in videos
+
+        - Clip Tracking Network + Video Tracking Pipeline
+
+        - 각 사람별 tracklet을 효율적으로 구축하기 위한 Clip Tracking Network 제안함.
+
+        - HRNet을 3D 형태로 확장한 3D-HRNet 사용함 → tracklet별 temporal pose estimation 수행함.
+
+    - Learning dynamics via graph neural networks for human pose estimation and tracking
+
+        - Pose Dynamics 학습을 위한 Graph Neural Network
+
+        - 과거 포즈 시퀀스로부터 pose dynamics(포즈 변화 패턴) 을 GNN으로 학습함.
+
+        - 이 dynamics 정보를 현재 프레임의 포즈 검출에 반영해 정확도 향상함.
+
+- **한계**
+
+    - Pose tracking 기반 방법은 멀티-퍼슨 환경에서 매우 강한 적응력 보임.
+
+    - 하지만 tracklet 생성 과정에서 feature similarity 계산, pose similarity 매칭 등의 절차가 필요함.
+
+    - 이로 인해 추가 계산 비용(overhead)이 발생함.
+
+<br>
+
+***4. Key Frame Optimization***
+
+- 트랙릿(tracklet) 기반 시간 정보 활용 외에도, 중요한 프레임(key frames) 을 선택해 현재 프레임의 포즈를 정교하게 보정하는 방식 존재함.
+
+- 불필요한 모든 프레임을 처리하지 않고, 핵심 프레임만 활용해 효율성과 정확도를 함께 노림.
+
+- 이 접근을 keyframe-based methods라 부름.
+
+- **주요 연구**
+
+    - Personalizing human video pose estimation
+
+        - Personalized Video Pose Estimation
+
+        - 소수의 고정밀 key frame 을 활용하여 모델을 개인 맞춤(personalized)으로 미세조정(fine-tune)함.
+
+        - 특정 사용자 또는 특정 동작 패턴에 최적화된 포즈 추정 가능함.
+
+    - Learning temporal pose estimation from sparsely-labeled videos
+
+        - Pose-Warper 네트워크
+
+        - 레이블된 key frame의 포즈를 현재 프레임으로 warping함.
+
+        - 여러 warped pose를 aggregation하여 현재 프레임의 pose heatmap 예측함.
+
+        - 적은 수의 레이블만으로도 좋은 결과 얻을 수 있는 구조임.
+
+    - Key frame proposal network for efficient pose estimation in videos
+
+        - Keyframe Proposal Network + Dictionary Reconstruction
+
+        - 효과적인 key frame을 자동으로 선택하는 Keyframe Proposal Network 제안함.
+
+        - 선택된 key frame을 기반으로 전체 포즈 시퀀스를 learnable dictionary 로 재구성함.
+
+        - key frame 기반 시간 정보 재구축 접근의 대표 사례임.
+
+    - Deep dual consecutive network for human pose estimation
+
+        - DCPose: Dual Consecutive Frame 기반 방법
+
+        - DCPose2라는 dual-frame 기반 비디오 포즈 추정 프레임워크 제안함.
+
+        - 양방향(dual temporal directions)의 인접 프레임 정보를 활용함.
+
+        - 핵심 구성 요소 3가지:
+
+            - Pose Temporal Merger : spatiotemporal context를 활용해 효과적인 keypoint 검색 영역을 생성함.
+
+            - Pose Residual Fusion : 양방향 프레임에서 헤더(heatmap) 잔차(residual)를 가중 융합함.
+
+            - Pose Correction Network : 최종적으로 포즈를 정교하게 보정함.
+
+        - 인접 프레임의 temporal 정보를 충분히 활용해 SOTA 성능 달성함.
+
+- **요약**
+
+    - Key frame 기반 접근은 모든 프레임을 처리하지 않고 핵심 프레임을 선택해 정확도 및 효율성을 동시에 확보하는 전략임.
+
+    - Warping, fusion, dictionary reconstruction 등 다양한 기법이 사용됨.
+
+    - 특히 DCPose는 양방향 temporal 정보를 적극 활용해 SOTA 달성함.
+
+<br>
+
+### 3.1.4 Model Compression-Based Methods

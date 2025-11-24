@@ -1,0 +1,41 @@
+title: 'deep pose'
+
+gpus: 0 
+saveDir: './output/deep_pose/'
+
+model:
+  name: 'DeepPose'
+  backbone: 'resnet50'
+  nkpts: 17
+  input_res: 224
+  output_res: 32
+  load_model: ''
+  pretrained: True
+
+train:
+  batch_size: 32
+  num_epochs: 100
+  mini_batch_count: 1
+  optimizer: 'RMSprop'
+  shuffle: True
+  lr: 2.5e-4
+  lr_step: 30
+  lr_gamma: 0.1
+  momentum: 0.9
+  weight_decay: 5e-4
+  print_freq: 10
+  save_freq: 5
+  dropLR: 5
+  drop_mag: 0.7
+  
+valid:
+  val_interval: 3
+  save_interval: 5
+
+data:
+  dataset: 'MPII'
+  data_dir: './data/MPII/images'
+  train_split: 'train'
+  val_split: 'valid'
+  num_workers: 4
+

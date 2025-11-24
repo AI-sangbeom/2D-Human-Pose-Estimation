@@ -7,15 +7,15 @@ from utils import AverageMeter, adjust_learning_rate
 class Trainer(object):
     """docstring for Trainer"""
     def __init__(self, Model, Optimizer, Loss, Metrics, File, vis, args):
-            super(Trainer, self).__init__()
-            self.model = Model
-            self.optimizer = Optimizer
-            self.Loss = Loss
-            self.metrics = Metrics
-            self.File = File
-            self.args = args
-            self.gpu = args.gpuid
-            self.model = self.model
+        super(Trainer, self).__init__()
+        self.model = Model
+        self.optimizer = Optimizer
+        self.Loss = Loss
+        self.metrics = Metrics
+        self.File = File
+        self.args = args
+        self.gpu = args.gpus if torch.cuda.is_available() else 'cpu'
+        self.model = self.model
 
     def test(self, valdataloader):
         with torch.no_grad():
@@ -26,7 +26,7 @@ class Trainer(object):
 
             train = self._epoch(traindataloader, epoch)
 
-            if epoch%self.args.valInterval==0:
+            if epoch%self.args.val_interval==0:
                 with torch.no_grad():
                     test = self._epoch(valdataloader, epoch, 'val')
                 Writer = open(self.File, 'a')
@@ -37,7 +37,7 @@ class Trainer(object):
                 Writer.write(train + '\n')
                 Writer.close()
 
-            if epoch%self.args.saveInterval==0:
+            if epoch%self.args.save_interval==0:
                 state = {
                     'epoch': epoch+1,
                     'model_state': self.model.state_dict(),

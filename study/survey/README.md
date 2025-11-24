@@ -767,3 +767,355 @@ network
 <br>
 
 ### 3.1.4 Model Compression-Based Methods
+
+- 모바일·웨어러블 같은 경량 디바이스에서는 적은 연산량 + 높은 정확도를 동시에 만족하는 HPE가 필요함.
+
+- 하지만 기존 포즈 추정 모델 대부분이 파라미터가 크고 연산이 무거워 실시간성이 부족함.
+
+- 이로 인해 실제 응용에서 효율성이 낮고, 경량 장비에서 사용하기 어려움.
+
+- 이를 해결하기 위해 모델 압축(model compression) 기반 접근이 제안됨.
+
+- 주요 목표는 **정확도 유지하면서 모델 크기와 연산량을 줄이는 것**임.
+
+- **주요 연구**
+    
+    - Fastpose: Towards real-time pose estimation and tracking via scale-normalized multi-task networks
+        - Fast Pose Distillation
+
+        - Teacher–Student 학습 구조 기반.
+
+        - 대형 모델이 가진 인체 구조 정보를 경량 모델에 효과적으로 전수함.
+
+        - Teacher: 8-stage Hourglass
+
+        - Student: 4-stage Hourglass
+
+        - 파라미터는 크게 줄고 정확도는 거의 유지됨.
+
+    - Lstm pose machines
+        
+        - Lightweight LSTM Video Pose Estimation
+
+        - 영상 포즈 추정을 위한 경량 LSTM 아키텍처 제안.
+
+        - 시간 정보는 유지하면서 연산량을 최소화함.
+
+    - Lite-hrnet: A lightweight high-resolution network
+    
+        - Lite-HRNet을 위한 HRNet 경량화 ([187])
+
+        - 두 가지 방식으로 HRNet을 크게 압축함:
+
+        1. Shuffle-Block 적용
+
+            - Vanilla HRNet의 기본 block을 Shuffle-Block으로 교체함.
+
+            - 연산량 및 파라미터 감소 효과 큼.
+
+        2. Conditional Channel Weighting Module 설계
+
+            - 여러 해상도 간 채널 가중치를 학습해 1×1 point-wise conv 대체함.
+
+            - 고비용 연산을 저비용 모듈로 변경함.
+
+        - 결과적으로 Lite-HRNet 완성됨.
+
+        - 원본 HRNet 대비 파라미터 훨씬 적지만 성능은 견고함.
+
+- **요약**
+
+    - 모델 압축 기반 접근은 정확도–효율성 절충(accuracy–efficiency trade-off) 을 해결하기 위한 핵심 전략임.
+
+    - Distillation, 블록 교체, 채널 weighting 등 다양한 방식 성공적으로 적용됨.
+
+    - Fast Pose Distillation, Lite-HRNet 등은 경량 환경에서 실용적인 성능 보여줌.
+
+
+### 3.1.5 Summary of Top-Down Framework
+
+- Top-down 프레임워크는 크게 두 구성 요소로 이루어져있다.
+
+    1. Object Detector → Bounding Box 탐지
+
+    2. Pose Estimator → 탐지된 영역 내에서 keyopint 예측 
+
+- 구성 요소별 역할
+
+    - Object Detector 
+
+        - 입력 이미지에서 Human Bounding Boxes을 생성
+
+        - 사람이 제대로 검출되지 않으면 이후 포즈 추정 정확도 떨어짐.
+            → proposal quality가 전체 성능에 직접적인 영향을 미침
+
+    - Pose Estimator 
+
+        - Bounding Box 안에 대해 정밀한 Keypoint 위치를 예측함 
+
+        - Top-Down 구조에서 가장 핵심적인 모듈이며, 전체 정확도를 결정하는 주요 요소 
+
+- Top-Down 방식의 장점 
+
+    - 객체 검출 기술과 포즈 추정 모델이 발전할수록 동시에 성능 향상 가능 
+
+    - 구조적 분리가 잘 되어 있어 확장성이 좋음 
+
+    - detector 및 pose estimator를 각각 개선해 전체 시스템을 지속적으로 업그레이드 가능
+
+<br>
+
+### 3.2 Bottom-Up Framework 
+
+- Bottom-up과 Top-down의 가장 큰 차이는 사람 검출(human detector) 사용 여부임.
+
+- Bottom-up 방식은 사람 bounding box를 먼저 찾지 않음.
+
+- 전체 이미지에서 모든 keypoint를 직접 추정한 뒤,\
+    → 각 keypoint가 어느 사람에 속하는지(identity 할당)를 결정해야 함.
+
+- 따라서 detector가 없어 연산량이 줄지만, joint grouping 문제라는 새로운 난제가 생김.
+
+- **Bottom-Up 방식의 장점**
+
+    - bounding box 생성 과정이 없어 계산량 감소
+
+    - 다수의 사람이 포함된 대규모 이미지에서도 병렬 처리 효율 높음
+
+    - 전체 프레임 단위로 연산하므로 추적(tracking) 없는 다중 인물 포즈 추정에 적합
+
+- **Bottom-Up 방식의 핵심 문제**
+
+    - 모든 keypoint를 한 번에 예측하므로 각 관절(joint)이 어떤 사람(person)에 속하는지 ID를 매칭해야 함.
+
+    - 이 identity grouping이 bottom-up의 가장 큰 난이도임.
+
+<br>
+
+### 3.2.1 Human Center Regression 
+
+- Human center regression 방식은 사람 인스턴스를 하나의 중심점(center)으로 표현하는 접근임.
+
+- 즉, 먼저 사람의 중심을 예측하고, 각 관절을 이 중심에 대한 상대적 위치(displacement) 로 인코딩하거나 회귀함.
+
+- Bottom-up에서 중요한 문제인 각 관절이 어느 사람에 속하는지를 center 기반으로 자연스럽게 해결하려는 방식임.
+
+- **주요 연구**
+
+    - Single-stage multi-person pose machines
+
+        - 사람 인스턴스 표현과 관절 위치 표현을 단일 단계(single-stage) 에 통합함.
+
+        - Root joint(중심 근처의 기준 관절)를 사람 인스턴스의 대표점으로 사용함.
+
+        - 각 body joint는 root joint로부터의 displacement 로 표현됨.
+
+        - root joint가 사람 ID를 담당하므로 keypoint grouping을 수월하게 함.
+
+    - Bottom-up human pose estimation via disentangled keypoint regression
+
+        - Human Center Map + Dense Pose Hypothesis
+
+        - 이미지에서 human center map 을 직접 예측함.
+
+        - center map의 각 픽셀 q에서 dense pose candidate(후보 포즈)를 예측함.
+
+        - center를 기준으로 주변 픽셀들이 candidate pose를 제안하는 구조임.
+
+        - 모든 관절이 center에 묶이므로 identity 할당이 자연스럽게 해결됨.
+
+- **요약**
+
+    - Human center regression은 사람을 하나의 중심점으로 표현하여 keypoint → person assignment 문제를 단순화하는 bottom-up 방식임.
+
+    - displacement나 dense prediction을 활용해 multi-person 포즈를 효율적으로 추정함.
+
+    - 주로 center map 또는 root joint를 기준으로 관절 grouping을 수행함.
+
+<br>
+
+### 3.2.2 Associate Embedding 
+
+- Associate embedding 기반 방식은 각 keypoint에 ‘임베딩 벡터(embedding vector)’를 부여하여 어떤 keypoint들이 같은 사람(person instance)에 속하는지 구분하는 기법임.
+
+- 즉, keypoint 위치 + keypoint embedding 을 함께 예측하여 multi-person keypoint grouping 문제를 embedding 공간에서 해결함.
+
+- **주요 연구**
+
+    - Associative embedding: End-to-end learning for joint detection and grouping
+
+        - Tag Embedding 기반 대표 연구
+
+        - 각 keypoint마다 추가적인 embedding vector(tag) 를 예측함.
+
+        - 이 embedding 값이 사람 ID 역할을 하며, 유사한 embedding을 가진 keypoint들은 같은 사람으로 그룹핑됨.
+
+        - Multi-person HPE에서 embedding 기반 grouping의 시초적인 연구임.
+
+    - Multi-person articulated tracking with spatial and temporal embeddings
+
+        - SpatialNet: Part-level Data Association 
+
+        - Body part heatmap과 함께 part-level association 을 예측함.
+
+        - 이 association이 keypoint embedding으로 파라미터화됨.
+
+        - 결과적으로 관절 간 연결 관계를 embedding 기반으로 처리함.
+
+    - Higherhrnet: Scale-aware representation learning for bottom-up human pose estimation
+
+        - High-Resolution Feature Pyramid + Grouping 
+
+        - Associative embedding의 keypoint grouping 전략을 그대로 따름.
+
+        - 하지만 backbone을 Higher-Resolution Network 로 구성해 특히 작은(person small-scale) 사람의 포즈 추정 성능을 크게 향상시킴.
+
+        - high-resolution 특징 피라미드로 정교한 keypoint 검출 가능함.
+
+    - Rethinking the heatmap regression for bottom-up human pose estimation
+
+        - Scale-Adaptive Heatmap Regression 
+
+        - 사람 크기(scale) 변화가 크거나 라벨 모호성(labeling ambiguity)이 큰 상황에 초점 맞춘 연구임.
+
+        - keypoint별로 ground-truth Gaussian kernel의 표준편차(σ)를 사람 크기에 따라 adaptive하게 조절함.
+
+        - 이 scale-adaptive heatmap은 다양한 사람 크기와 라벨 잡음에 강한 성능 보임.
+
+- **요약**
+
+    - Associate embedding 방식은 keypoint마다 embedding을 부여해 누가 누구인지(person identity) 를 embedding 공간에서 판별하는 bottom-up 접근임.
+
+    - Associative embedding로 시작해 SpatialNet, HRNet 기반 모델, scale-adaptive 모델 등으로 확장됨.
+
+    - 특히 multi-person 환경에서 강한 grouping 성능을 보임.
+
+<br>
+
+
+### 3.2.3 Part Field 
+
+- Part field 기반 방식은
+    1) keypoint를 먼저 검출하고
+    2) keypoint 간 연결 정보(connection field)를 예측한 뒤
+    3) 연결 강도에 따라 keypoint를 사람 단위로 그룹핑하는 bottom-up 접근임.
+
+- 즉, 사람을 직접 찾는 것이 아니라 관절과 관절 사이의 관계를 먼저 모델링해 인스턴스를 구성함.
+
+- **주요 연구**
+
+    - Real-time multi-person 2d pose estimation using part affinity fields
+
+        - Part Affinity Fields(PAF) 기반 대표 연구 — OpenPose
+
+        - 두 개의 브랜치로 구성된 multi-stage CNN 제안함:
+
+            - Branch 1: Keypoint confidence map 예측
+
+            - Branch 2: Part Affinity Fields(PAF) 예측 → 관절 간 연결 강도 표현
+
+        - 이후 greedy 알고리즘을 사용해 가장 강한 연결을 기준으로 동일 인물의 관절들을 조립함.
+
+        - Bottom-up multi-person pose estimation의 대표적 기념비적 연구임.
+
+    - Pifpaf: Composite fields for human pose estimation
+
+        - Part Intensity Field + Part Association Field
+
+        - Part intensity field로 각 신체 부위의 위치를 더 정확히 찾음.
+
+        - Part association field로 신체 부위 간 연결 관계를 예측함.
+
+        - OpenPose의 PAF 개념을 확장한 형태임.
+
+    - Simple pose: Rethinking and improving a bottom-up approach for multi-person pose estimation
+
+        - Keypoint-associated Representation 기반 PAF 확장
+
+        - PAF 기반 heatmap 표현을 개선해 keypoint grouping 효과 향상함.
+
+        - 보다 정교한 body part heatmap을 생성해 grouping 안정성을 높임.
+
+    - Multi-person pose estimation via multi-layer fractal network and joints kinship pattern
+
+        - Multi-layer Fractal Network
+
+        - Keypoint 위치 heatmap을 회귀(regress)하고 인접 관절 간의 kinship(관계성) 을 추론함.
+
+        - 이 kinship 정보로 관절 쌍을 최적 매칭함 → 새로운 connection representation 제안함.
+
+    - Differentiable hierarchical graph grouping for multi-person pose estimation
+
+        - Hierarchical Graph Grouping (Differentiable)
+
+        - keypoint grouping 문제를 graph grouping 문제로 변환함.
+
+        - 연결 구조를 그래프 형태로 모델링하고 end-to-end로 pose detection 네트워크와 함께 학습 가능함.
+
+        - 기존 greedy 기반 알고리즘보다 더 학습 친화적인 구조임.
+
+- **요약**
+
+    - Part field 기반 방식은 keypoint → connection → instance 순서로 사람 인스턴스를 구성하는 bottom-up 접근임.
+
+    - PAF(OpenPose)에서 출발해 intensity field, association field, fractal network, graph grouping 등으로 확장됨.
+
+    - 특히 multi-person 환경에서 robust하게 keypoint grouping을 수행할 수 있는 장점 있음.
+
+<br>
+
+### 3.2.4 Summary
+
+- **요약**
+
+    - Bottom-up 방식은 추가적인 사람 검출(object detector) 단계를 제거함.
+
+    - 덕분에 전체 파이프라인의 연산량이 줄고 효율성이 크게 향상됨.
+
+    - 모든 keypoint를 이미지 전체에서 한 번에 예측한 뒤 각 관절을 어떤 사람에 속하는지 grouping하는 방식임.
+
+- **실용성**
+
+    - 높은 효율성 때문에 실제 응용(practical applications) 에서 유망함.
+
+    - 특히 속도 중요하거나 다수 인물이 포함된 장면에서 장점 큼.
+
+    - 대표적으로 OpenPose가 산업계에서 널리 활용되고 있음.
+
+<br>
+
+
+## Network Training Refinement
+
+- 신경망 학습 전체 파이프라인 관점에서 보면, 데이터의 양·질, 훈련 전략, 손실 함수, 도메인 적응 능력 등이 모델 성능에 큰 영향을 줌.
+
+- 이에 따라 네트워크 학습 성능을 개선하기 위한 기법들을 다음 네 가지 범주로 분류함.
+
+- **네 가지 학습 개선 방법**
+
+    1. **Data Augmentation Techniques**
+
+        - 데이터의 양과 다양성 증가시키는 것이 목적임.
+
+        - 다양한 시각적 변형을 통해 모델이 더 많은 상황을 학습하게 함.
+
+    2. **Multi-task Training Strategies**
+
+        - 관련된 여러 시각적 작업 간 표현(feature) 공유를 통해 더 풍부하고 일반화된 특징 학습을 목표로 함.
+
+        - 단일 작업 학습보다 더 정보량 많은 표현 학습 가능함.
+
+    3. **Loss Function Constraints**
+
+        - 네트워크의 최적화 목적(optimization objective) 을 규정함.
+
+        - 어떤 손실 함수를 사용하느냐에 따라 모델이 강조하는 정보와 학습 패턴이 달라짐.
+
+    4. **Domain Adaptation Methods**
+
+        - 서로 다른 데이터셋 간 도메인 격차(domain gap)를 줄이는 것이 목적임.
+
+        - 모델이 새로운 환경이나 데이터셋에 잘 적응하도록 도와줌.
+
+
+## Post Processing Approaches

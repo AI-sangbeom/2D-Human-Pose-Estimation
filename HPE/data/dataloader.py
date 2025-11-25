@@ -1,7 +1,7 @@
 import datasets
 from torch.utils.data import DataLoader
 
-def ImageLoader(args, split):
+def dataloader(args, split):
 	return DataLoader(
 		dataset = getattr(datasets, args.dataset)(args, split),
 		batch_size = args.data_loader_size,

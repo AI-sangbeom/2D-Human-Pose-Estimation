@@ -1,15 +1,15 @@
 title: 'deep pose'
 
-gpus: 0 
+seed: 42
+gpus: 0, 1, 2, 3
+num_workers: 4
 saveDir: './output/deep_pose/'
 
 model:
   name: 'DeepPose'
   backbone: 'resnet50'
   nkpts: 17
-  input_res: 224
-  output_res: 32
-  load_model: ''
+  checkpoint: ''
   pretrained: True
 
 train:
@@ -23,19 +23,20 @@ train:
   lr_gamma: 0.1
   momentum: 0.9
   weight_decay: 5e-4
-  print_freq: 10
-  save_freq: 5
+  save_freq: 10
   dropLR: 5
-  drop_mag: 0.7
+  dropMag: 0.7
   
 valid:
   val_interval: 3
   save_interval: 5
 
+
+
 data:
-  dataset: 'MPII'
+  name: 'MPII'
   data_dir: './data/MPII/images'
   train_split: 'train'
   val_split: 'valid'
-  num_workers: 4
+  
 

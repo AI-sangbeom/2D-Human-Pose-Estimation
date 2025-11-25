@@ -17,7 +17,7 @@ def parse_args():
         '--gpus',
         help='GPUs to use, e.g. 0,1,2,3',
         default=None,
-        type=tuple,
+        type=str,
 	)
     parser.add_argument(
 		'--checkpoint', 

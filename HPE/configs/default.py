@@ -50,7 +50,7 @@ def update_config(cfg, args):
     cfg.defrost()
     cfg.merge_from_file(args.cfg)
     if args.gpus is not None:
-        cfg.gpus = args.gpus
+        cfg.gpus = eval(f'({args.gpus},)')
     if args.checkpoint is not None:
         cfg.model.checkpoint = args.checkpoint
     cfg.freeze()

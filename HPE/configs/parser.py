@@ -14,13 +14,13 @@ def parse_args():
         default=False,
 	)
     parser.add_argument(
-        '--gpus',
-        help='GPUs to use, e.g. 0,1,2,3',
+        '--gpus', '-g',
+        help='GPUs to use, e.g. 0,1,2,3 or -1 to use CPU',
         default=None,
         type=str,
 	)
     parser.add_argument(
-		'--checkpoint', 
+		'--ckpt', 
 		help='Path to the checkpoint',
         default=None,
 		type=str,

@@ -5,6 +5,7 @@ C = CN()
 C.title = 'HPE_Experiment'
 
 C.seed = 42
+C.use_deterministic = True
 C.gpus = 0, 
 C.num_workers = 4
 C.saveDir = ''
@@ -45,14 +46,18 @@ C.data.data_dir = './data/MPII/images'
 C.data.train_split = 'train'
 C.data.val_split = 'valid'
 
+from utils import printM
+
 @line
 def update_config(cfg, args):
     cfg.defrost()
     cfg.merge_from_file(args.cfg)
     if args.gpus is not None:
-        cfg.gpus = eval(f'({args.gpus},)')
-    if args.checkpoint is not None:
-        cfg.model.checkpoint = args.checkpoint
+        gpus = args.gpus.replace(',', '')
+        gpus = tuple(int(gpu) for gpu in gpus)
+        cfg.gpus = gpus
+    if args.ckpt is not None:
+        cfg.model.checkpoint = args.ckpt
     cfg.freeze()
-    print(f"[Configuration]\n")
-    print(cfg)
+    printM(f"[Configuration]\n")
+    printM(cfg)

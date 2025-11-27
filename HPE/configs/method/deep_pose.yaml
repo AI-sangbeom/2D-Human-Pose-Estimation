@@ -1,15 +1,16 @@
-title: 'deep pose'
+title: 'DeepPose'
 
 seed: 42
+use_deterministic: False
 gpus: 0, 1, 2, 3
 num_workers: 4
-saveDir: './output/deep_pose/'
+saveDir: 'resnet50'
 
 model:
   name: 'DeepPose'
   backbone: 'resnet50'
   nkpts: 17
-  checkpoint: ''
+  checkpoint: 
   pretrained: True
 
 train:
@@ -28,8 +29,8 @@ train:
   dropMag: 0.7
   
 valid:
-  val_interval: 3
-  save_interval: 5
+  val_interval: 1
+  save_interval: 10
 
 
 

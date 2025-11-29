@@ -10,6 +10,8 @@ try:
 except Exception as e:
     MASTER_RANK = True
 
+print(MASTER_RANK)
+
 def master_only(func):
     """rank 0에서만 실행하는 데코레이터"""
     def wrapper(*args, **kwargs):
@@ -37,7 +39,6 @@ def printT(message):
 @master_only
 def printM(message, color=None):
     print(colored_msg(message, color))
-        
 
 def line(func):
     def wrapper(*args, **kwargs):

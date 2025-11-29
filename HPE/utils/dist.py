@@ -57,8 +57,8 @@ class DDPManager:
             if not torch.cuda.is_available():
                 printW('CUDA is not available')
             self.set_cpu()
-        elif self.num_gpus == 1:
-            self.set_cuda()
+        #elif self.num_gpus == 1:
+        #    self.set_cuda()
         else:
             if 'RANK' in os.environ and 'WORLD_SIZE' in os.environ:
                 self.set_ddp()
@@ -74,6 +74,16 @@ class DDPManager:
         os.environ['OMP_NUM_THREADS'] = str(optimal_threads)
         printS(f"OMP_NUM_THREADS set to {optimal_threads}")
         
+    def init_ddp(self):
+        # DDP 초기화
+        try:
+            #if not dist.is_initialized():/
+            dist.init_process_group(backend='nccl')
+            self.ddp_initialized = True
+
+        except Exception as e:
+            raise RuntimeError(f" DDP 초기화 실패: {e}")
+            
     def set_ddp(self):
         """DDP 설정 (안전 장치 포함)"""
         
@@ -84,45 +94,45 @@ class DDPManager:
                 " 예: torchrun --nproc_per_node=2 train.py"
             )
         
-        # DDP 초기화
-        try:
-            dist.init_process_group(backend='nccl', timeout=timedelta(seconds=30))
-
-        except Exception as e:
-            raise RuntimeError(f" DDP 초기화 실패: {e}")
-        
+        self.init_ddp()
         local_rank_idx = int(os.environ['LOCAL_RANK'])
         
         # GPU 매핑 검증
         if not self.target_gpu_ids:
-            dist.destroy_process_group()
+            self.cleanup()
             raise ValueError(" target_gpu_ids가 비어있습니다!")
-        
-        if local_rank_idx >= len(self.target_gpu_ids):
-            dist.destroy_process_group()
-            raise IndexError(
-                printS(f"프로세스 수({local_rank_idx + 1})가 GPU 개수({len(self.target_gpu_ids)})보다 많습니다!")
-            )
-        
-        real_gpu_id = self.target_gpu_ids[local_rank_idx]
         
         # GPU 존재 확인
         available_gpus = torch.cuda.device_count()
-        
         if available_gpus == 0:
-            dist.destroy_process_group()
+            self.cleanup()
             raise RuntimeError("CUDA GPU를 찾을 수 없습니다!")        
-        try:
-            assert printE(real_gpu_id >= available_gpus, f"GPU{self.target_gpu_ids}가 존재하지 않습니다. 사용가능한 GPU를 확인해주세요.")
-        except:
-            dist.barrier()
-            dist.destroy_process_group()
-            self.set_cuda()
-            return
         
+        auto_alloc = False
+        if len(self.target_gpu_ids) > available_gpus:
+            printW(f"프로세스 수({local_rank_idx + 1})가 GPU 개수({len(self.target_gpu_ids)})보다 많습니다!")
+            printS("자동 GPU 할당 모드로 전환합니다.")
+            if available_gpus == 1:
+                return self.set_cuda()
+            else:
+                self.cleanup()
+                self.init_ddp()
+                auto_alloc = True
+
+        if auto_alloc:
+            gpu_id = local_rank_idx
+        else:
+            gpu_id = self.target_gpu_ids[local_rank_idx]
+        
+        printS(f"Available GPUs: {available_gpus}, Requested GPU ID: {gpu_id}")
+        assert local_rank_idx in self.target_gpu_ids, f"GPU{self.target_gpu_ids}가 존재하지 않습니다. 사용가능한 GPU를 확인해주세요."
+        
+        # 각 프로세스 매핑 출력
+        self.optimize_cpu_threads(available_gpus)
+
         # 디바이스 설정
-        torch.cuda.set_device(real_gpu_id)
-        self.device = torch.device(f'cuda:{real_gpu_id}')
+        torch.cuda.set_device(gpu_id)
+        self.device = torch.device(f'cuda:{gpu_id}')
         
         # 분산 정보 저장
         self.rank = dist.get_rank()
@@ -134,13 +144,9 @@ class DDPManager:
         printS(f"World Size: {self.world_size}")
         printS(f"Backend: nccl")
         printS(f"Target GPUs: {self.target_gpu_ids}")
-        
-        # 각 프로세스 매핑 출력
-        printS(f" [Rank {self.rank:2d}] Local Rank {local_rank_idx} -> Physical GPU {real_gpu_id}")
-        self.optimize_cpu_threads(available_gpus)
+        printM(f'{self.ddp_initialized}', 'CYAN' )
         # 동기화 (모든 프로세스가 여기까지 도달할 때까지 대기)
         dist.barrier()
-        self.ddp_initialized = True
         
         # 종료 시그널 처리
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -158,6 +164,7 @@ class DDPManager:
             if self.ddp_initialized:
                 dist.barrier()  # 모든 프로세스 동기화
             dist.destroy_process_group()
+            printS("DDP process group destroyed.")
 
     def set_cuda(self):
         """Single GPU 모드 설정"""
@@ -179,7 +186,7 @@ class DDPManager:
             raise RuntimeError(" CUDA 사용 가능한 GPU가 없습니다!")
         
         if gpu_id >= available_gpus:
-            printW(f"GPU {gpu_id}가 존재하지 않습니다. (사용 가능: 0-{available_gpus-1})")
+            printW(f"GPU {gpu_id}가 존재하지 않습니다. 사용가능한 GPU를 확인해주세요.")
             gpu_id = 0
         
         self.optimize_cpu_threads(available_gpus)

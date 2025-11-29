@@ -7,7 +7,7 @@ from utils import AverageMeter, DDPManager, set_seed, adjust_learning_rate, prin
 class Trainer(DDPManager):
     def __init__(self, cfg, builder: Builder, logFile: str):
         super(Trainer, self).__init__(cfg.gpus)
-        set_seed(cfg.seed, cfg.use_deterministic)
+        `set_seed`(cfg.seed, cfg.use_deterministic)
         self.target_gpu_ids = cfg.gpus  # 예: [2, 4]
         self.logFile = logFile
         self.cfg = cfg

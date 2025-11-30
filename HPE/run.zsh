@@ -35,10 +35,7 @@ fi
 echo "Setting OMP_NUM_THREADS=$OMP_THREADS"
 export OMP_NUM_THREADS=$OMP_THREADS
 
-# 6. CUDA 디바이스 설정 (필수)
-# export CUDA_VISIBLE_DEVICES=$GPU_LIST
-
-# 7. 학습 시작
+# 6. 학습 시작
 # [!] main.py에 --gpus 인자를 넘길 필요가 없는 경우가 많습니다 (torchrun 사용 시).
 # 하지만 코드에서 필요로 한다면 그대로 둡니다.
 torchrun --nproc_per_node=$NUM_GPUS main.py --gpus "$GPU_LIST"

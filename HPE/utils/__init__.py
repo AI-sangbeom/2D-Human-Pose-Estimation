@@ -4,15 +4,7 @@ from datetime import datetime
 from .deco import *
 from .dist import set_seed, DDPManager
 
-@master_only
-def printM(message):
-    print(message)
-	
-@master_only
-def error_msg(msg, show_traceback=True):
-    print(f"\n [ERROR] {msg}\n", file=sys.stderr)
-    if show_traceback:
-        traceback.print_exc()
+
 			
 def save_dir(cfg):
     now = datetime.now()

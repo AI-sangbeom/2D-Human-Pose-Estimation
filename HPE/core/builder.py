@@ -12,7 +12,7 @@ class Builder(object):
 		self.mcfg = self.cfg.model
 
 	def model(self):
-		assert self.mcfg.name in models.__all__, printE(f'Unknown model : "{self.mcfg.name}"\n        Available models : {models.__all__}')
+		assert self.mcfg.name in models.__all__, f'Unknown model : "{self.mcfg.name}"\n        Available models : {models.__all__}'
 		model_builder = getattr(models, self.mcfg.name)
 		model = model_builder(self.mcfg.nkpts, self.mcfg.backbone, self.mcfg.pretrained)
 		

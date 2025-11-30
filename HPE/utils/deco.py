@@ -1,16 +1,11 @@
-import sys
+import os 
 import traceback
-import torch.distributed as dist
-from datetime import timedelta
 from utils.color import colored_msg
 
 try:
-    dist.init_process_group(backend='nccl', timeout=timedelta(seconds=30))
-    MASTER_RANK = not dist.is_initialized() or dist.get_rank() == 0
-except Exception as e:
+    MASTER_RANK = int(os.environ['RANK']) == 0
+except:
     MASTER_RANK = True
-
-print(MASTER_RANK)
 
 def master_only(func):
     """rank 0에서만 실행하는 데코레이터"""
@@ -26,7 +21,7 @@ def printE(message):
 
 @master_only
 def printS(message):
-    print(f" {colored_msg('[SETTING]', 'blue')} {message}")
+    print(f" {colored_msg('[SYSTEMS]', 'blue')} {message}")
 
 master_only
 def printW(message):

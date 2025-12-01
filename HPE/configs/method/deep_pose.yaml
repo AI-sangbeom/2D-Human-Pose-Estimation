@@ -31,6 +31,7 @@ train:
 valid:
   val_interval: 1
   save_interval: 10
+  metric: 'mAP'
 
 
 

@@ -1,5 +1,6 @@
 import torch
 import models
+import core.metrics as metrics
 from data.dataloader import dataloader
 from utils import printE
 
@@ -22,7 +23,7 @@ class Builder(object):
 		return model
 
 	def loss(self):
-		pass
+		metric = getattr(metrics, self.cfg.valid.metric)
 
 	def metric(self):
 		pass

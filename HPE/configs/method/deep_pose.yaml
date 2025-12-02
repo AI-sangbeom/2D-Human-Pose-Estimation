@@ -40,5 +40,7 @@ data:
   data_dir: './data/MPII/images'
   train_split: 'train'
   val_split: 'valid'
+  ncls: 10
+  topk: 5
   
 

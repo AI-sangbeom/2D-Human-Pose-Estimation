@@ -1,5 +1,6 @@
 import torch
-from typing import Optional, Sequence
+from typing import Optional, Sequence, List
+
 
 class OKS:
     """
@@ -55,6 +56,7 @@ class OKS:
         assert areas.shape[0] == N
 
         device = gt_keypoints.device
+        gt_keypoints = gt_keypoints.to(device)
         pred_keypoints = pred_keypoints.to(device)
         areas = areas.to(device)
         sigmas = self.sigmas.to(device)
@@ -65,10 +67,11 @@ class OKS:
 
         # visibility mask: v > in_vis_thres 인 joint만 사용
         vis_mask = (gt_v > self.in_vis_thres).float()  # (N, K)
-        dist2 = ((pred_xy - gt_xy) ** 2).sum(dim=-1)      # (N, K)
+        dist2 = ((pred_xy - gt_xy) ** 2).sum(dim=-1)   # (N, K)
         denom = 2.0 * areas.view(N, 1) * ((sigmas * 2.0) ** 2).view(1, K) + self.eps  # (N, K)
 
-        return (torch.exp(-dist2 / denom) * vis_mask).sum(dim=1)/(vis_mask.sum(dim=1) + self.eps)
+        oks = (torch.exp(-dist2 / denom) * vis_mask).sum(dim=1) / (vis_mask.sum(dim=1) + self.eps)
+        return oks  # (N,)
 
 
 class OKSAP:
@@ -78,6 +81,7 @@ class OKSAP:
     - 멀티 클래스 지원 (num_classes)
     - 여러 OKS threshold (기본: 0.50~0.95 step 0.05)
     - 클래스별 AP + AP50, AP75, 전체 mAP 계산
+    - 배치 단위 update / reset / 누적 compute 지원
 
     Parameters
     ----------
@@ -96,8 +100,8 @@ class OKSAP:
 
     def __init__(
         self,
-        sigmas: torch.Tensor,
         num_classes: int,
+        sigmas: torch.Tensor,
         in_vis_thres: float = 0.0,
         eps: float = 1e-10,
         oks_thresholds: Optional[Sequence[float]] = None,
@@ -110,6 +114,69 @@ class OKSAP:
         else:
             self.oks_thresholds = torch.tensor(oks_thresholds, dtype=torch.float32)
 
+        # 누적 버퍼 (배치 단위 update용)
+        self._gt_list: List[torch.Tensor] = []
+        self._pred_list: List[torch.Tensor] = []
+        self._area_list: List[torch.Tensor] = []
+        self._score_list: List[torch.Tensor] = []
+        self._label_list: List[torch.Tensor] = []
+
+    # ----------------------------
+    # reset / update (배치 누적용)
+    # ----------------------------
+    def reset(self):
+        """누적된 GT / Pred / score / label 버퍼 초기화."""
+        self._gt_list = []
+        self._pred_list = []
+        self._area_list = []
+        self._score_list = []
+        self._label_list = []
+
+    @torch.no_grad()
+    def update(
+        self,
+        gt_keypoints: torch.Tensor,   # (B, K, 3)
+        pred_keypoints: torch.Tensor, # (B, K, 2)
+        areas: torch.Tensor,          # (B,)
+        scores: torch.Tensor,         # (B,)
+        labels: torch.Tensor,         # (B,)
+    ):
+        """
+        한 배치에 대한 GT / Pred / area / score / label을 누적.
+
+        학습 루프에서:
+            for batch in dataloader:
+                metric.update(...)
+            result = metric.compute_accumulated()
+        이런 식으로 사용.
+        """
+        if not isinstance(gt_keypoints, torch.Tensor):
+            gt_keypoints = torch.tensor(gt_keypoints)
+        if not isinstance(pred_keypoints, torch.Tensor):
+            pred_keypoints = torch.tensor(pred_keypoints)
+        if not isinstance(areas, torch.Tensor):
+            areas = torch.tensor(areas)
+        if not isinstance(scores, torch.Tensor):
+            scores = torch.tensor(scores)
+        if not isinstance(labels, torch.Tensor):
+            labels = torch.tensor(labels)
+
+        B = gt_keypoints.shape[0]
+        assert pred_keypoints.shape[0] == B
+        assert areas.shape[0] == B
+        assert scores.shape[0] == B
+        assert labels.shape[0] == B
+
+        # 그냥 리스트에 이어 붙임 (나중에 cat)
+        self._gt_list.append(gt_keypoints.detach().cpu())
+        self._pred_list.append(pred_keypoints.detach().cpu())
+        self._area_list.append(areas.detach().cpu())
+        self._score_list.append(scores.detach().cpu())
+        self._label_list.append(labels.detach().cpu())
+
+    # ----------------------------
+    # 내부 AP 계산 (변경 없음)
+    # ----------------------------
     @torch.no_grad()
     def _compute_ap_single_threshold(
         self,
@@ -177,8 +244,11 @@ class OKSAP:
 
         return float(ap)
 
+    # ----------------------------
+    # single-shot compute (지금까지 쓰던 형태)
+    # ----------------------------
     @torch.no_grad()
-    def compute(
+    def compute_once(
         self,
         gt_keypoints: torch.Tensor,   # (N, K, 3) [x, y, v]
         pred_keypoints: torch.Tensor, # (N, K, 2)
@@ -187,19 +257,8 @@ class OKSAP:
         labels: torch.Tensor,         # (N,) 0~C-1
     ):
         """
-        여러 OKS threshold에 대해, 각 클래스별 AP 및 전체 mAP 계산.
-
-        Returns
-        -------
-        result : dict
-            {
-                "mAP": float,                   # 모든 클래스 + 모든 thr 평균
-                "mAP_50": float or nan,         # OKS=0.50에서 클래스 평균
-                "mAP_75": float or nan,         # OKS=0.75에서 클래스 평균
-                "ap_per_class": Tensor(C,),     # OKS thresholds 평균 per class
-                "ap_per_class_per_thr": Tensor(T, C),  # (num_thr, num_classes)
-                "ap_per_thr": Tensor(T,),       # 클래스 평균 per threshold
-            }
+        한 번에 텐서를 넣어서 바로 mAP 계산하는 함수.
+        (기존 인터페이스 유지)
         """
         # OKS 계산
         oks = self.oks.compute(gt_keypoints, pred_keypoints, areas)  # (N,)
@@ -262,68 +321,59 @@ class OKSAP:
             "mAP": mAP,
             "mAP_50": mAP_50,
             "mAP_75": mAP_75,
-            "ap_per_class": ap_per_class.cpu(),                 # (C,)
+            "ap_per_class": ap_per_class.cpu(),   # (C,)
         }
 
+    # ----------------------------
+    # 누적된 데이터로 compute
+    # ----------------------------
+    @torch.no_grad()
+    def compute(self):
+        """
+        지금까지 update()로 누적된 모든 배치에 대해 mAP 계산.
+
+        reset() 호출 전까지 누적된 전체를 한 번에 평가.
+        """
+        if len(self._gt_list) == 0:
+            # 아무것도 누적되지 않은 경우
+            return {
+                "mAP": 0.0,
+                "mAP_50": float("nan"),
+                "mAP_75": float("nan"),
+                "ap_per_class": torch.zeros(self.num_classes),
+            }
+
+        gt_keypoints = torch.cat(self._gt_list, dim=0)
+        pred_keypoints = torch.cat(self._pred_list, dim=0)
+        areas = torch.cat(self._area_list, dim=0)
+        scores = torch.cat(self._score_list, dim=0)
+        labels = torch.cat(self._label_list, dim=0)
+
+        return self.compute_once(
+            gt_keypoints=gt_keypoints,
+            pred_keypoints=pred_keypoints,
+            areas=areas,
+            scores=scores,
+            labels=labels,
+        )
 
 
-import torch
-
-if __name__ == '__main__':
-    # torch.manual_seed(42)
-
-    C = 3          # 클래스 3개
-    N, K = 10, 4   # 인스턴스 10, keypoint 4개
-    sigmas = torch.ones(K) / K
-
-    # -------------------------
-    # (0~1 normalzied) GT keypoints
-    # -------------------------
-    gt = torch.rand(N, K, 3)
-    gt[..., 2] = torch.randint(0, 3, (N, K))  # visibility 0/1/2
-
-    # prediction = GT + small noise
-    pred = gt[..., :2] + torch.randn(N, K, 2) * 0.12
-    pred = pred.clamp(0, 1)
-
-    # -------------------------
-    # area (0~1 normalized bbox area)
-    # -------------------------
-    x_min = gt[..., 0].min(dim=1).values
-    x_max = gt[..., 0].max(dim=1).values
-    y_min = gt[..., 1].min(dim=1).values
-    y_max = gt[..., 1].max(dim=1).values
-
-    widths  = (x_max - x_min).clamp(min=1e-6)
-    heights = (y_max - y_min).clamp(min=1e-6)
-    areas = widths * heights
-
-    # -------------------------
-    # scores
-    # -------------------------
-    scores = torch.rand(N)
-
-    # -------------------------
-    # labels: 0,1,2 중 하나
-    # -------------------------
-    labels = torch.randint(0, C, (N,), dtype=torch.long)
-
-    print("샘플별 클래스 라벨:", labels.tolist())
-
-    # -------------------------
-    # Compute OKS AP
-    # -------------------------
+if __name__=='__main__':
+    K = 10
+    C = 4
+    sigmas = torch.ones(K)/K
     oksap = OKSAP(sigmas=sigmas, num_classes=C)
-    result = oksap.compute(
-        gt_keypoints=gt,
-        pred_keypoints=pred,
-        areas=areas,
-        scores=scores,
-        labels=labels,
-    )
 
-    print("mAP@50-95:", result["mAP"])
-    print("mAP@50:", result["mAP_50"])
-    print("mAP@75:", result["mAP_75"])
-    print("AP per class:", result["ap_per_class"])          # 길이 3
+    for batch in dataloader:
+        oksap.update(
+            gt_keypoints=batch["gt_kpts"],   # (B, K, 3)
+            pred_keypoints=batch["pred_kpts"], # (B, K, 2)
+            areas=batch["areas"],           # (B,)
+            scores=batch["scores"],         # (B,)
+            labels=batch["labels"],         # (B,)
+        )
 
+    result = oksap.compute_accumulated()
+    print(result["mAP"], result["mAP_50"], result["ap_per_class"])
+
+    oksap.reset()  # 다음 epoch용

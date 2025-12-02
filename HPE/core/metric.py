@@ -1,3 +1,4 @@
+import torch 
 from metrics import * 
 
 class Metric:
@@ -66,9 +67,22 @@ class Metric:
             self.ap_class_index,
         ) = results
 
+class ClassifyMetric(CMet):
+    def __init__(self, cfg):
+        ncls = cfg.data.ncls
+        topk = cfg.data.topk
+        super(ClassifyMetric, self).__init__(ncls, topk)
 
-class DetectionMetric(Metric):
-    pass 
 
-class PoseMetric(Metric):
-    pass 
+class DetectionMetric(DMet):
+    def __init__(self, cfg):
+        ncls = cfg.data.ncls
+        iou_thrs = cfg.model.iou_threshold
+        super(DetectionMetric, self).__init__(ncls, iou_thrs)
+
+
+class PoseMetric(PMet):
+    def __init__(self, cfg):
+        ncls = cfg.data.ncls
+        sigmas = OKS_SIGMAS if cfg.data.name == 'coco' else torch.ones(ncls)/ncls
+        super(PoseMetric, self).__init__(ncls, sigmas)

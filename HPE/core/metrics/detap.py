@@ -54,7 +54,6 @@ class DetectionMAP:
         self,
         num_classes: int,
         iou_thresholds: Optional[Sequence[float]] = None,
-        use_11_point_interp: bool = False,  # VOC 2007 스타일 쓰고 싶으면 True
     ):
         self.num_classes = num_classes
         if iou_thresholds is None:
@@ -62,8 +61,6 @@ class DetectionMAP:
             self.iou_thresholds = torch.arange(0.5, 0.96, 0.05)
         else:
             self.iou_thresholds = torch.tensor(iou_thresholds, dtype=torch.float32)
-
-        self.use_11_point_interp = use_11_point_interp
 
         # 누적 버퍼
         # class별 GT, detection을 모아둘 리스트
@@ -212,30 +209,20 @@ class DetectionMAP:
         recall = tp_cum / float(num_gt)
         precision = tp_cum / torch.clamp(tp_cum + fp_cum, min=1e-10)
 
-        if self.use_11_point_interp:
-            # VOC 2007 방식
-            ap = 0.0
-            for t in torch.arange(0.0, 1.1, 0.1):
-                if (recall >= t).any():
-                    p = precision[recall >= t].max()
-                else:
-                    p = 0.0
-                ap += p / 11.0
-            return float(ap)
-        else:
-            # COCO/VOC 2010+ 방식 (integral of PR curve)
-            mrec = torch.cat([torch.tensor([0.0]), recall, torch.tensor([1.0])])
-            mpre = torch.cat([torch.tensor([0.0]), precision, torch.tensor([0.0])])
 
-            # precision envelope
-            for i in range(mpre.numel() - 2, -1, -1):
-                mpre[i] = torch.maximum(mpre[i], mpre[i + 1])
+        # COCO/VOC 2010+ 방식 (integral of PR curve)
+        mrec = torch.cat([torch.tensor([0.0]), recall, torch.tensor([1.0])])
+        mpre = torch.cat([torch.tensor([0.0]), precision, torch.tensor([0.0])])
 
-            idx = torch.nonzero(mrec[1:] != mrec[:-1]).squeeze(-1)
-            ap = 0.0
-            for i in idx:
-                ap += (mrec[i + 1] - mrec[i]) * mpre[i + 1]
-            return float(ap)
+        # precision envelope
+        for i in range(mpre.numel() - 2, -1, -1):
+            mpre[i] = torch.maximum(mpre[i], mpre[i + 1])
+
+        idx = torch.nonzero(mrec[1:] != mrec[:-1]).squeeze(-1)
+        ap = 0.0
+        for i in idx:
+            ap += (mrec[i + 1] - mrec[i]) * mpre[i + 1]
+        return float(ap)
 
     @torch.no_grad()
     def compute(self) -> Dict[str, float]:

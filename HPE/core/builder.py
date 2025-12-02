@@ -13,8 +13,9 @@ class Builder(object):
 		self.mcfg = self.cfg.model
 
 	def model(self):
-		assert self.mcfg.name in models.__all__, f'Unknown model : "{self.mcfg.name}"\n        Available models : {models.__all__}'
-		model_builder = getattr(models, self.mcfg.name)
+		model_name = self.mcfg.name
+		assert model_name in models.__all__, f'Unknown model : "{model_name}"\n        Available models : {models.__all__}'
+		model_builder = getattr(models, model_name)
 		model = model_builder(self.mcfg.nkpts, self.mcfg.backbone, self.mcfg.pretrained)
 		
 		if self.mcfg.checkpoint is not None:
@@ -23,9 +24,12 @@ class Builder(object):
 		return model
 
 	def loss(self):
-		metric = getattr(metrics, self.cfg.valid.metric)
+		pass
 
 	def metric(self):
+		metric_name = self.cfg.valid.metric
+		assert metrics.__all__, f'Unknown metric : "{metric_name}"\n        Available metrics : {metrics.__all__}'
+		metric = getattr(metrics, self.cfg.valid.metric)
 		pass
 			
 	def optimizer(self, model):

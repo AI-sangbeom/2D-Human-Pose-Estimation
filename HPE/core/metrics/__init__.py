@@ -5,16 +5,10 @@ from .pck import PCK
 from .pckh import PCKh
 from .pdj import PDJ
 from .mpjpe import MPJPE
-from .oksap import OKSAP as AP
-from .detap import DetectionMAP as mAP
-from .clsmet import ClassifyMet as cMet
+from .oksap import OKSAP as PMet
+from .detap import DetectionMAP as DMet
+from .clsmet import ClassifyMet as CMet
 
-__all__ = (
-    "PCKh",
-    "AP",
-    "mAP",
-    "cMet"
-)
 
 OKS_SIGMAS = torch.tensor([
     0.26, 0.25, 0.25, 0.35, 0.35,
@@ -40,3 +34,10 @@ def mask_iou(mask1: torch.Tensor, mask2: torch.Tensor, eps: float = 1e-7) -> tor
     union = (mask1.sum(1)[:, None] + mask2.sum(1)[None]) - intersection  # (area1 + area2) - intersection
     return intersection / (union + eps)
 
+__all__ = (
+    "PCKh",
+    "PMet",
+    "DMet",
+    "CMet",
+    "OKS_SIGMAS"
+)

@@ -9,6 +9,7 @@ saveDir: 'resnet50'
 model:
   name: 'DeepPose'
   backbone: 'resnet50'
+  iou_threshold: 0.5
   nkpts: 17
   checkpoint: 
   pretrained: True
@@ -31,9 +32,6 @@ train:
 valid:
   val_interval: 1
   save_interval: 10
-  metric: 'mAP'
-
-
 
 data:
   name: 'MPII'
@@ -42,5 +40,10 @@ data:
   val_split: 'valid'
   ncls: 10
   topk: 5
-  
+
+metric:
+  classify: 'CMet'
+  detect: 'DMet'
+  pose: 'PMet'
+
 

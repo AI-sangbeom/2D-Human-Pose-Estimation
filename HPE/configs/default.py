@@ -36,7 +36,6 @@ C.train.dropMag = 0.7
 C.valid = CN()
 C.valid.val_interval = 3
 C.valid.save_interval = 5
-C.valid.metric = 'mAP'
 
 C.test = CN()
 C.test.batch_size = 32
@@ -49,6 +48,11 @@ C.data.train_split = 'train'
 C.data.val_split = 'valid'
 C.data.ncls = 10
 C.data.topk = 5
+
+C.metric = CN()
+C.metric.classify = 'CMet'
+C.metric.detect = 'DMet'
+C.metric.pose = 'PMet'
 
 from utils import printM
 

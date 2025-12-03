@@ -35,6 +35,7 @@ def mask_iou(mask1: torch.Tensor, mask2: torch.Tensor, eps: float = 1e-7) -> tor
     return intersection / (union + eps)
 
 __all__ = (
+    "PCK",
     "PCKh",
     "PMet",
     "DMet",

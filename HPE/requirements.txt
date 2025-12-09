@@ -1,3 +1,5 @@
 timm
 yacs
 progress
+safetensors
+torchmetrics

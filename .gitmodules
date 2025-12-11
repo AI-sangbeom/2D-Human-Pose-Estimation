@@ -1,6 +1,9 @@
-[submodule "HPE/models/backbone/dinov3"]
-	path = HPE/models/backbone/dinov3
+[submodule "HPE/thirdparty/dinov3"]
+	path = HPE/thirdparty/dinov3
 	url = https://github.com/facebookresearch/dinov3.git
-[submodule "HPE/models/backbone/pytorch-image-models"]
-	path = HPE/models/backbone/pytorch-image-models
+[submodule "HPE/thirdparty/pytorch-image-models"]
+	path = HPE/thirdparty/pytorch-image-models
 	url = https://github.com/huggingface/pytorch-image-models.git
+[submodule "HPE/thirdparty/ConvNeXt-V2"]
+	path = HPE/thirdparty/ConvNeXt-V2
+	url = https://github.com/facebookresearch/ConvNeXt-V2.git

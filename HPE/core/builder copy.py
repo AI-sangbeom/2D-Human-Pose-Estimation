@@ -1,7 +1,7 @@
 import torch
 import models
 import losses
-import metrics
+import metric
 import dataloaders
 
 
@@ -30,8 +30,8 @@ class Builder(object):
 		return getattr(instance, self.args.model)
 
 	def metric(self):
-		PCKhinstance = metrics.PCKh(self.args)
-		PCKinstance = metrics.PCK(self.args)
+		PCKhinstance = metric.PCKh(self.args)
+		PCKinstance = metric.PCK(self.args)
 		if self.args.dataset=='MPII':
 			return {'PCK' : getattr(PCKinstance, self.args.model), 'PCKh' : getattr(PCKhinstance, self.args.model)}         
 		if self.args.dataset=='COCO':

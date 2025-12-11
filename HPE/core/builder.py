@@ -1,6 +1,6 @@
 import torch
 import models
-import core.metrics as metrics
+import core.metric as metric
 from data.dataloader import dataloader
 from utils import printE
 
@@ -28,8 +28,8 @@ class Builder(object):
 
 	def metric(self):
 		metric_name = self.cfg.valid.metric
-		assert metrics.__all__, f'Unknown metric : "{metric_name}"\n        Available metrics : {metrics.__all__}'
-		metric = getattr(metrics, self.cfg.valid.metric)
+		assert metric.__all__, f'Unknown metric : "{metric_name}"\n        Available metrics : {metric.__all__}'
+		metric = getattr(metric, self.cfg.valid.metric)
 		pass
 			
 	def optimizer(self, model):

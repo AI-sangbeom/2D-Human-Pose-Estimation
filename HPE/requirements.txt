@@ -1,5 +1,6 @@
 timm
 yacs
+ninja
 progress
 safetensors
 torchmetrics

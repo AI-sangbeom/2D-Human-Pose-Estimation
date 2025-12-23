@@ -34,7 +34,7 @@ valid:
   save_interval: 10
 
 data:
-  name: 'MPII'
+  dataset: 'MPII'
   data_dir: './data/MPII/images'
   train_split: 'train'
   val_split: 'valid'

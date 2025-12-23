@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from typing import Tuple, List
-from models.layers import GatedAttention, GaussianPooling
+from models.nn import GatedAttention, GaussianPooling
 
 class MetaSpace(nn.Module):
     """

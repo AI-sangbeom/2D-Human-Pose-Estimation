@@ -26,7 +26,7 @@ class Trainer(DDPManager):
         for epoch in range(start_epoch, end_epoch+1):
             log = self._epoch(self.train_dataloader, epoch, mode='train')
 
-            if epoch%self.cfg.val_interval==0:
+            if epoch%self.cfg.valid.val_interval==0:
                 with torch.no_grad():
                     test = self._epoch(self.valid_dataloader, epoch, 'val')
                 Writer = open(self.logFile, 'a')
@@ -37,7 +37,7 @@ class Trainer(DDPManager):
                 Writer.write(log + '\n')
                 Writer.close()
 
-            if epoch%self.cfg.save_interval==0:
+            if epoch%self.cfg.valid.save_interval==0:
                 state = {
                     'epoch': epoch+1,
                     'model_state': self.model.state_dict(),

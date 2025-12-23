@@ -1,7 +1,39 @@
 import torch
 import torch.nn as nn
 from torch import Tensor
-from .mlp import MLP, LayerNorm
+from .mlp import MLP, SpDropPath, SparseGELU
+from .norm import SpLayerNorm, SpGRN, LayerNorm
+from .conv import SparseDepthwiseConv2d
+import spconv.pytorch as spconv
+
+class SpBlock(nn.Module):
+    """ Sparse ConvNeXtV2 Block. 
+
+    Args:
+        dim (int): Number of input channels.
+        drop_path (float): Stochastic depth rate. Default: 0.0
+        layer_scale_init_value (float): Init value for Layer Scale. Default: 1e-6.
+    """
+    def __init__(self, dim, drop_path=0.):
+        super(SpBlock, self).__init__()
+        self.dwconv = SparseDepthwiseConv2d(dim, kernel_size=7)
+        self.norm = SpLayerNorm(dim, 1e-6)
+        self.pwconv1 = nn.Linear(dim, 4 * dim)   
+        self.act = SparseGELU()
+        self.pwconv2 = nn.Linear(4 * dim, dim)
+        self.grn = SpGRN(4  * dim)
+        self.drop_path = SpDropPath(drop_path)
+
+    def forward(self, x):
+        input = x
+        x = self.dwconv(x)
+        x = self.norm(x)
+        x = self.pwconv1(x)
+        x = self.act(x)
+        x = self.grn(x)
+        x = self.pwconv2(x)
+        x = input + self.drop_path(x)
+        return x
 
 class Block(nn.Module):
     """Transformer Block"""

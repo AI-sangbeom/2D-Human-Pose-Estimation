@@ -12,8 +12,6 @@ dinov3_vit = torch.hub.load(
 VisionTransformer = dinov3_vit.__class__
 dinov3_vit = None
 
-
-
 class Dinov3ViT(VisionTransformer):
     def __init__(
             self,     

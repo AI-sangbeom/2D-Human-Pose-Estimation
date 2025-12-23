@@ -1,0 +1,78 @@
+# Few-Shot Keypoint Detection Configuration
+
+model:
+  name: FSKD
+  backbone: small  # DINOv3 small configuration
+  nkpts: 17
+  pretrained: true
+  n_way: 5  # Number of classes per episode
+  temperature: 1.0
+  fusion_method: cross_attention  # cross_attention, self_attention, prototype_aware, adaptive
+  use_hierarchical_prototypes: false
+  freeze_backbone: false
+  dropout: 0.1
+
+train:
+  # Episodic training parameters
+  n_way: 5
+  k_shot: 1
+  n_queries: 1
+  batch_size: 4  # Number of episodes per batch
+  num_episodes: 10000
+  
+  # Optimization
+  meta_lr: 1e-3
+  weight_decay: 1e-4
+  grad_clip_norm: 1.0
+  
+  # Training schedule
+  num_epochs: 100
+  
+  # Meta-learning (if using MAML-style training)
+  update_steps: 5
+  adaptation_lr: 0.01
+
+data:
+  dataset: MPII  # Base dataset name
+  train_split: train
+  val_split: valid
+  test_split: test
+  
+  # Episode generation
+  episode_length: 100  # Number of samples per episode
+  class_sampling: random  # random, balanced, fixed
+  
+  # Data loading
+  num_workers: 4
+  pin_memory: True
+  drop_last: False
+
+# Loss function configuration
+loss:
+  keypoint_weight: 1.0
+  confidence_weight: 0.1
+  distance_weight: 0.01
+  temperature: 1.0
+
+# Validation and evaluation
+valid:
+  val_episodes: 1000  # Number of episodes for validation
+  save_interval: 5
+  
+test:
+  test_episodes: 1000  # Number of episodes for testing
+  n_way: 5
+  k_shot: 1
+  n_queries: 5  # More queries for evaluation
+
+# Logging and saving
+logging:
+  level: INFO
+  save_dir: ./output/few_shot_fskd
+  tensorboard_dir: ./logs/few_shot_fskd
+  checkpoint_dir: ./checkpoints/few_shot_fskd
+
+# Hardware configuration
+hardware:
+  device: cuda  # cuda, cpu
+  mixed_precision: false  # Enable automatic mixed precision training

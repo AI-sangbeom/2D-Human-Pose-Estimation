@@ -7,3 +7,6 @@
 [submodule "HPE/thirdparty/ConvNeXt-V2"]
 	path = HPE/thirdparty/ConvNeXt-V2
 	url = https://github.com/facebookresearch/ConvNeXt-V2.git
+[submodule "HPE/thirdparty/MinkowskiEngine"]
+	path = HPE/thirdparty/MinkowskiEngine
+	url = https://github.com/NVIDIA/MinkowskiEngine.git

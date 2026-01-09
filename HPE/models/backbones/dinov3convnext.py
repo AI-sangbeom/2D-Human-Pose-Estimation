@@ -108,3 +108,10 @@ convnext_sizes = {
         dims=[192, 384, 768, 1536],
     ),
 }
+
+convnext_ckps = {
+    'tiny': './checkpoints/dinov3/convnext/dinov3_convnext_tiny_pretrain_lvd1689m-21b726bb.pth', 
+    'small': './checkpoints/dinov3/convnext/dinov3_convnext_small_pretrain_lvd1689m-296db49d.pth', 
+    'base': './checkpoints/dinov3/convnext/dinov3_convnext_base_pretrain_lvd1689m-801f2ba9.pth', 
+    'large': './checkpoints/dinov3/convnext/dinov3_convnext_large_pretrain_lvd1689m-61fa432d.pth'
+    }

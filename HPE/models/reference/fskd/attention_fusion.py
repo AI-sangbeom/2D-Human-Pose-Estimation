@@ -98,6 +98,10 @@ class AttentionFusion(nn.Module):
         support_as_query = support_features.unsqueeze(0)  # [1, N_support, embed_dim]
         query_as_key = query_features.unsqueeze(0)  # [1, N_query, embed_dim]
         query_as_value = query_features.unsqueeze(0)  # [1, N_query, embed_dim]
+
+        query_as_query = query_features.unsqueeze(0)
+        support_as_key = support_features.unsqueeze(0)
+        support_as_value = support_features.unsqueeze(0)
         
         # Cross-attention: support attends to query
         attended_support, attention_weights_support = self.cross_attention(

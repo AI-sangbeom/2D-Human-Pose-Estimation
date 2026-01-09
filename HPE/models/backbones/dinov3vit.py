@@ -165,3 +165,8 @@ vit_sizes = {
 
 }
 
+vit_ckps = {
+    'small': './checkpoints/dinov3/vit/dinov3_vits16_pretrain_lvd1689m-08c60483.pth', 
+    'base': './checkpoints/dinov3/vit/dinov3_vit7b16_pretrain_lvd1689m-a955f4ea.pth', 
+    'large': None
+    }

@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 import spconv.pytorch as spconv
 from timm.models.layers import trunc_normal_
-from nn import SpBlock, SpLayerNorm, LayerNorm
+from nn.spmodules import ConvBlock, LayerNorm, LayerNorm
 
 def to_sparse(x):
     """
@@ -102,7 +102,7 @@ class SparseConvNeXtV2(nn.Module):
         # Downsampling layers: sparse convolution
         for i in range(3):
             downsample_layer = nn.Sequential(
-                SpLayerNorm(dims[i], eps=1e-6),
+                LayerNorm(dims[i], eps=1e-6),
                 spconv.SparseConv2d(dims[i], dims[i+1], kernel_size=2, stride=2, bias=True)
             )
             self.downsample_layers.append(downsample_layer)
@@ -113,7 +113,7 @@ class SparseConvNeXtV2(nn.Module):
         cur = 0
         for i in range(4):
             stage = nn.Sequential(
-                *[SpBlock(dim=dims[i], drop_path=dp_rates[cur + j], D=D) for j in range(depths[i])]
+                *[ConvBlock(dim=dims[i], drop_path=dp_rates[cur + j], D=D) for j in range(depths[i])]
             )
             self.stages.append(stage)
             cur += depths[i]

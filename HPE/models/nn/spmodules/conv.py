@@ -41,7 +41,7 @@ def to_sparse(x):
     
     return sparse_tensor
 
-class SparseDepthwiseConv2d(nn.Module):
+class DepthwiseConv2d(nn.Module):
     """
     Sparse Depthwise Convolution
     spconv가 groups를 지원하지 않으므로 채널별로 개별 convolution 수행
@@ -99,7 +99,7 @@ class SparseDepthwiseConv2d(nn.Module):
         return x.replace_feature(new_features)
     
 
-class EfficientSparseDepthwiseConv2d(nn.Module):
+class EfficientDepthwiseConv2d(nn.Module):
     """효율적인 Sparse Depthwise Convolution"""
     def __init__(self, channels, kernel_size=7, padding=3, bias=True):
         super().__init__()

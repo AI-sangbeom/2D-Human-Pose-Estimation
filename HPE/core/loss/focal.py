@@ -26,13 +26,11 @@ class VarifocalLoss(nn.Module):
     def forward(self, pred_score: torch.Tensor, gt_score: torch.Tensor, label: torch.Tensor) -> torch.Tensor:
         """Compute varifocal loss between predictions and ground truth."""
         weight = self.alpha * pred_score.sigmoid().pow(self.gamma) * (1 - label) + gt_score * label
-        device = weight.device
-        with amp.autocast(device, enabled=False):
-            loss = (
-                (F.binary_cross_entropy_with_logits(pred_score.float(), gt_score.float(), reduction="none") * weight)
-                .mean(1)
-                .sum()
-            )
+        loss = (
+            (F.binary_cross_entropy_with_logits(pred_score.float(), gt_score.float(), reduction="none") * weight)
+            .mean(1)
+            .sum()
+        )
         return loss
     
 class FocalLoss(nn.Module):
@@ -110,31 +108,22 @@ class FocalLoss(nn.Module):
         return loss
 
     def multi_class_focal_loss(self, inputs, targets):
+        targets = targets.to(torch.long)
         """ Focal loss for multi-class classification. """
         if self.alpha is not None:
             alpha = self.alpha.to(inputs.device)
 
-        # Convert logits to probabilities with softmax
         probs = F.softmax(inputs, dim=1)
-
-        # One-hot encode the targets
         targets_one_hot = F.one_hot(targets, num_classes=self.num_classes).float()
-
-        # Compute cross-entropy for each class
         ce_loss = -targets_one_hot * torch.log(probs)
-
-        # Compute focal weight
         p_t = torch.sum(probs * targets_one_hot, dim=1)  # p_t for each sample
         focal_weight = (1 - p_t) ** self.gamma
 
-        # Apply alpha if provided (per-class weighting)
         if self.alpha is not None:
             alpha_t = alpha.gather(0, targets)
             ce_loss = alpha_t.unsqueeze(1) * ce_loss
 
-        # Apply focal loss weight
         loss = focal_weight.unsqueeze(1) * ce_loss
-
         if self.reduction == 'mean':
             return loss.mean()
         elif self.reduction == 'sum':

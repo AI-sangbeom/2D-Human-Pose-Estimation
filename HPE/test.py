@@ -1,104 +1,55 @@
 import cv2
 import numpy as np
-bimg = np.zeros((224, 224, 3))
+bimg = np.zeros((224, 224, 3), dtype=np.uint8)
 cv2.imshow('DINOv3 Pose Result', bimg)
+cv2.waitKey(1)
 import torch
 import torchvision
 from models.pose import DINOv3Pose
-
-
-# 모델 클래스 import (사용자 환경에 맞게 경로 수정)
-# 예: from models.pose import DINOv3Pose 
-# 여기서는 가상의 클래스로 대체합니다.
+import os 
+import natsort
 
 # ==========================================
-# 1. Utils (Pre/Post Processing & Scaling)
+# 1. Simple Pre/Post Processing Functions
 # ==========================================
 
-def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True, stride=32):
-    """이미지 비율을 유지하며 리사이즈하고 패딩을 추가합니다."""
-    shape = im.shape[:2]  # current shape [height, width]
-    if isinstance(new_shape, int):
-        new_shape = (new_shape, new_shape)
-
-    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
-    if not scaleup:  # only scale down, do not scale up (for better val mAP)
-        r = min(r, 1.0)
-
-    ratio = r, r
-    new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
-    dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]  # wh padding
-
-    if auto:  # minimum rectangle
-        dw, dh = np.mod(dw, stride), np.mod(dh, stride)  # wh padding
-    elif scaleFill:  # stretch
-        dw, dh = 0.0, 0.0
-        new_unpad = (new_shape[1], new_shape[0])
-        ratio = new_shape[1] / shape[1], new_shape[0] / shape[0]
-
-    dw /= 2  # divide padding into 2 sides
-    dh /= 2
-
-    if shape[::-1] != new_unpad:  # resize
-        im = cv2.resize(im, new_unpad, interpolation=cv2.INTER_LINEAR)
-    
-    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
-    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-    im = cv2.copyMakeBorder(im, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # add border
-    return im, ratio, (dw, dh)
-
-def scale_coords(img1_shape, coords, img0_shape, ratio_pad=None):
+def preprocess_simple(img0, img_size=640, device='cuda'):
     """
-    [핵심] 박스 좌표를 모델 입력 크기(img1_shape)에서 원본 이미지 크기(img0_shape)로 변환
-    패딩을 제거하고 비율에 맞춰 스케일링합니다.
+    학습과 똑같이: 비율 무시하고 강제 리사이즈 (Stretch)
     """
-    if ratio_pad is None:  # calculate from img0_shape
-        gain = min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])  # gain  = old / new
-        pad = (img1_shape[1] - img0_shape[1] * gain) / 2, (img1_shape[0] - img0_shape[0] * gain) / 2  # wh padding
-    else:
-        gain = ratio_pad[0][0]
-        pad = ratio_pad[1]
-
-    coords[:, [0, 2]] -= pad[0]  # x padding 제거
-    coords[:, [1, 3]] -= pad[1]  # y padding 제거
-    coords[:, :4] /= gain        # scale 복원
+    img = cv2.resize(img0, (img_size, img_size))
+    img = img.transpose((2, 0, 1)) 
+    img = np.ascontiguousarray(img)
+    img_tensor = torch.from_numpy(img).to(device).float()
+    img_tensor /= 255.0
     
-    clip_coords(coords, img0_shape) # 원본 이미지 밖으로 나가는 좌표 자르기
+    if len(img_tensor.shape) == 3:
+        img_tensor = img_tensor.unsqueeze(0)
+        
+    return img_tensor
+
+def scale_coords_simple(coords, img0_shape, img1_shape=(640, 640)):
+    """
+    패딩 계산 없이 단순 비율만 곱해서 복원
+    """
+    h0, w0 = img0_shape[:2]
+    h1, w1 = img1_shape[:2]
+    
+    coords = coords.clone() if isinstance(coords, torch.Tensor) else coords.copy()
+    
+    # X 좌표
+    coords[..., 0] *= (w0 / w1) 
+    if coords.shape[-1] > 2:
+        coords[..., 2] *= (w0 / w1)
+
+    # Y 좌표
+    coords[..., 1] *= (h0 / h1)
+    if coords.shape[-1] > 3:
+        coords[..., 3] *= (h0 / h1)
+        
     return coords
 
-def clip_coords(boxes, shape):
-    """Clip bounding xyxy bounding boxes to image shape (height, width)"""
-    if isinstance(boxes, torch.Tensor):  # faster individually
-        boxes[..., 0].clamp_(0, shape[1])  # x1
-        boxes[..., 1].clamp_(0, shape[0])  # y1
-        boxes[..., 2].clamp_(0, shape[1])  # x2
-        boxes[..., 3].clamp_(0, shape[0])  # y2
-    else:  # np.array
-        boxes[..., [0, 2]] = boxes[..., [0, 2]].clip(0, shape[1])  # x1, x2
-        boxes[..., [1, 3]] = boxes[..., [1, 3]].clip(0, shape[0])  # y1, y2
-
-def scale_kpts(kpts, img1_shape, img0_shape, ratio_pad=None):
-    """
-    [핵심] 키포인트 좌표를 모델 입력 크기에서 원본 이미지 크기로 변환
-    """
-    if ratio_pad is None:  # calculate from img0_shape
-        gain = min(img1_shape[0] / img0_shape[0], img1_shape[1] / img0_shape[1])  # gain  = old / new
-        pad = (img1_shape[1] - img0_shape[1] * gain) / 2, (img1_shape[0] - img0_shape[0] * gain) / 2  # wh padding
-    else:
-        gain = ratio_pad[0][0]
-        pad = ratio_pad[1]
-
-    kpts[..., 0::3] = (kpts[..., 0::3] - pad[0]) / gain # x 좌표 변환
-    kpts[..., 1::3] = (kpts[..., 1::3] - pad[1]) / gain # y 좌표 변환
-    
-    # 클리핑 (선택 사항)
-    kpts[..., 0::3] = kpts[..., 0::3].clamp(0, img0_shape[1])
-    kpts[..., 1::3] = kpts[..., 1::3].clamp(0, img0_shape[0])
-    
-    return kpts
-
 def xywh2xyxy(x):
-    """Convert nx4 boxes from [x, y, w, h] to [x1, y1, x2, y2]"""
     y = x.clone() if isinstance(x, torch.Tensor) else np.copy(x)
     y[..., 0] = x[..., 0] - x[..., 2] / 2  # top left x
     y[..., 1] = x[..., 1] - x[..., 3] / 2  # top left y
@@ -106,86 +57,236 @@ def xywh2xyxy(x):
     y[..., 3] = x[..., 1] + x[..., 3] / 2  # bottom right y
     return y
 
-def non_max_suppression_pose(prediction, conf_thres=0.1, iou_thres=0.45, max_det=300, nc=1, nk=12):
+def point2box(points):
+    min_vals, _ = torch.min(points, dim=1)
+    max_vals, _ = torch.max(points, dim=1)
+    return torch.cat([min_vals, max_vals], 1)
+    
+import torch
+import torchvision
+import numpy as np
+
+def non_max_suppression_pose(prediction, conf_thres=0.25, iou_thres=0.45, max_det=300, nc=7, nkpts=4):
     """
-    NMS 수행 후 Dictionary 형태로 반환
+    NMS for Pose Estimation (No Box in Input)
+    prediction: (Batch, nc + nk, Anchors) or (Batch, Anchors, nc + nk)
+    Channel layout: [cls(nc), kpts(nk=nkpts*3)]
+    
+    Args:
+        nc: number of classes (default 7)
+        nkpts: number of keypoints (default 4)
     """
-    # 1. Shape Transformation: (B, C, A) -> (B, A, C)
-    if prediction.shape[1] == 4 + nc + nk:
+    
+    # 1. Shape Transformation & Check
+    # (Batch, Channels, Anchors) -> (Batch, Anchors, Channels)
+    # 보통 Anchors 개수(예: 8400)가 Channels(예: 19)보다 훨씬 큽니다.
+    if prediction.shape[1] < prediction.shape[2]:
         prediction = prediction.transpose(1, 2)
         
-    bs = prediction.shape[0]
-    output = [] 
+    bs = prediction.shape[0]     # Batch size
+    num_channels = prediction.shape[2] # nc + nk
+    output = []
+
+    # 2. Keypoint Dimension Check
+    # nc를 제외한 나머지 채널이 Keypoint 정보
+    nk = num_channels - nc 
+    kpt_dim = nk // nkpts # 2(xy) or 3(xyc)
     
-    # 2. Candidate Filtering (1차 필터링)
-    # 여기서 이미 conf_thres보다 낮은 것들은 False가 됨
-    xc = prediction[..., 4:4+nc].amax(-1) > conf_thres
+    print(f"[DEBUG] Input Shape: {prediction.shape}")
+    print(f"[DEBUG] Parsed: nc={nc}, nk={nk} (nkpts={nkpts}, dim={kpt_dim})")
+
+    # 3. Pre-compute Scores for efficiency
+    # Box나 Objectness Score가 없으므로, Max Class Probability를 점수로 사용
+    # (B, A, nc) -> (B, A)
+    max_cls_scores, _ = prediction[..., :nc].max(dim=2)
+    
+    # 1차 필터링용 마스크 (속도 향상)
+    xc = max_cls_scores > conf_thres 
 
     for xi, x in enumerate(prediction):
-        # 결과 딕셔너리 초기화
-        num_kpts = nk // 3 
+        # 결과 담을 그릇
         result = {
             'boxes': torch.zeros((0, 4), device=prediction.device),
             'scores': torch.zeros((0,), device=prediction.device),
             'labels': torch.zeros((0,), device=prediction.device),
-            'keypoints': torch.zeros((0, num_kpts, 3), device=prediction.device)
+            'keypoints': torch.zeros((0, nkpts, 3), device=prediction.device)
         }
 
-        # 3. Apply 1st Filter
-        x = x[xc[xi]]
+        # 4. Apply Confidence Filtering
+        # 해당 배치의 앵커들 중 score가 높은 것만 추출
+        x = x[xc[xi]] # (Num_Candidates, nc + nk)
         
-        # 필터링 후 남은 게 없으면 빈 결과 추가 후 다음으로
         if not x.shape[0]: 
             output.append(result)
             continue
 
-        # 4. Split & Decode
-        box = x[:, :4]
-        cls = x[:, 4:4+nc]
-        kpt = x[:, 4+nc:]
-
-        box = xywh2xyxy(box)
-
-        conf, j = cls.max(1, keepdim=True)
-        x = torch.cat((box, conf, j.float(), kpt), 1)
-        c = x[:, 5:6] * 7680
-        boxes, scores = x[:, :4] + c, x[:, 4]
+        # 5. Parse Data
+        # Layout: [cls(nc) | kpts(nk)]
+        cls_probs = x[:, :nc]      # (N, nc)
+        kpt_flat = x[:, nc:]       # (N, nk)
         
-        i = torchvision.ops.nms(boxes, scores, iou_thres)
+        # 6. Score & Label
+        # 각 Detection의 가장 높은 클래스와 점수 추출
+        conf_scores, labels = cls_probs.max(1) # (N, )
         
-        # 7. Limit Detections
+        # 2차 Threshold 필터링 (Class specific confidence)
+        # 이미 위에서 필터링 했지만, argmax 이후 정확한 값으로 다시 체크
+        mask = conf_scores > conf_thres
+        
+        # 필터링 적용
+        scores = conf_scores[mask]
+        labels = labels[mask]
+        kpt_flat = kpt_flat[mask]
+        
+        if not scores.shape[0]:
+            output.append(result)
+            continue
+            
+        # 7. Reshape Keypoints
+        # (N, nk) -> (N, nkpts, kpt_dim)
+        kpts_data = kpt_flat.view(-1, nkpts, kpt_dim)
+        
+        # 만약 kpt_dim이 2라면(x,y), conf(1.0)를 추가해서 3으로 맞춤
+        if kpt_dim == 2:
+            ones = torch.ones((kpts_data.shape[0], nkpts, 1), device=x.device)
+            kpts_final = torch.cat([kpts_data, ones], dim=2)
+        else:
+            kpts_final = kpts_data
+            
+        # 8. Point Feature -> Bounding Box (Min/Max)
+        # xy 좌표만 추출 (N, nkpts, 2)
+        kpts_xy = kpts_final[..., :2]
+        
+        min_coord, _ = torch.min(kpts_xy, dim=1) # (min_x, min_y)
+        max_coord, _ = torch.max(kpts_xy, dim=1) # (max_x, max_y)
+        
+        # Box 생성 [x1, y1, x2, y2]
+        # (옵션) 0보다 작은 좌표 클램핑: min_coord = torch.clamp(min_coord, min=0)
+        calc_boxes = torch.cat([min_coord, max_coord], dim=1)
+        
+        # 9. NMS (Non-Maximum Suppression)
+        # Class-agnostic NMS를 위해 오프셋 적용
+        c = labels.float() * 7680 
+        boxes_for_nms = calc_boxes + c.unsqueeze(1)
+        
+        i = torchvision.ops.nms(boxes_for_nms, scores, iou_thres)
+        
         if i.shape[0] > max_det: 
             i = i[:max_det]
         
-        det = x[i]
-        
-        # 8. Fill Dictionary
-        result['boxes'] = det[:, :4]
-        result['scores'] = det[:, 4]
-        result['labels'] = det[:, 5].long()
-        result['keypoints'] = det[:, 6:].reshape(-1, num_kpts, 3)
+        # 최종 결과 저장
+        result['boxes'] = calc_boxes[i]
+        result['scores'] = scores[i]
+        result['labels'] = labels[i].long()
+        result['keypoints'] = kpts_final[i]
         
         output.append(result)
 
     return output
+# ==========================================
+# 2. Visualization Function
+# ==========================================
+def draw_detections(im0, res, nkpts=4, conf_threshold=0.5):
+    """
+    Draw bounding boxes, connected keypoints (Green), and center line (Red)
+    """
+    im0_copy = im0.copy()
+    h0, w0 = im0_copy.shape[:2]
+    
+    scores = res['scores']
+    kpts = res['keypoints']  # (N, nkpts, 3)
+    labels = res['labels']
+    
+    # 클래스별 색상 팔레트
+    colors = [
+        (255, 0, 0),    # Blue
+        (0, 255, 0),    # Green
+        (0, 0, 255),    # Red
+        (255, 255, 0),  # Cyan
+        (255, 0, 255),  # Magenta
+        (0, 255, 255),  # Yellow
+        (128, 0, 128),  # Purple
+    ]
+    
+    # 연결할 점의 순서 정의 (Green Line)
+    # 요청하신 0-1, 1-2, 2-3, 3-0 (박스 형태)로 연결합니다.
+    # 만약 '3-1' 연결을 원하시면 [3, 1]로 수정하세요.
+    connections = [[0, 1], [1, 2], [2, 3], [3, 0]]
+    
+    for box_idx, (score, label, kpt) in enumerate(zip(scores, labels, kpts)):
+        if kpt.shape[0] < 4:
+            continue
 
-def plot_skeleton(img, kpts, steps=3):
-    """키포인트 시각화"""
-    num_kpts = len(kpts) // steps
-    for i in range(num_kpts):
-        x, y, conf = kpts[3*i], kpts[3*i+1], kpts[3*i+2]
-        if conf < 0.5: continue 
+        # -----------------------------------------------------------
+        # 1. 초록색 선 그리기 (Box Outline)
+        # -----------------------------------------------------------
+        for start_idx, end_idx in connections:
+            pt1 = kpt[start_idx].cpu().numpy()[:2].astype(int)
+            pt2 = kpt[end_idx].cpu().numpy()[:2].astype(int)
+            
+            # 이미지 범위 체크 (옵션)
+            # if (0 <= pt1[0] < w0) and (0 <= pt2[0] < w0):
+            cv2.line(im0_copy, tuple(pt1), tuple(pt2), (0, 255, 0), 2) # Green, Thickness 2
+
+        # -----------------------------------------------------------
+        # 2. 빨간색 선 그리기 (Left Midpoint <-> Right Midpoint)
+        # -----------------------------------------------------------
+        # 점들을 좌표값만 추출 (N, 2)
+        pts_xy = kpt[:, :2].cpu().numpy().astype(float)
         
-        cv2.circle(img, (int(x), int(y)), 5, (0, 255, 0), -1)
-        # cv2.putText(img, str(i), (int(x), int(y)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        # X축 기준으로 정렬하여 왼쪽 2개, 오른쪽 2개 구분
+        # np.argsort를 사용하여 x좌표가 작은 순서대로 인덱스 추출
+        sorted_indices = np.argsort(pts_xy[:, 0])
+        
+        left_indices = sorted_indices[:2]  # x가 작은 2개
+        right_indices = sorted_indices[2:] # x가 큰 2개
+        
+        # 각 그룹의 중점 계산
+        left_pts = pts_xy[left_indices]
+        right_pts = pts_xy[right_indices]
+        
+        mid_left = np.mean(left_pts, axis=0).astype(int)
+        mid_right = np.mean(right_pts, axis=0).astype(int)
+        
+        # 빨간색 선 그리기
+        cv2.line(im0_copy, tuple(mid_left), tuple(mid_right), (0, 0, 255), 1) # Red
+        
+        # 중점 표시 (옵션: 파란색 작은 점)
+        cv2.circle(im0_copy, tuple(mid_left), 3, (255, 0, 0), -1)
+        cv2.circle(im0_copy, tuple(mid_right), 3, (255, 0, 0), -1)
+
+        # -----------------------------------------------------------
+        # 3. Keypoints 및 Label 그리기 (기존 로직)
+        # -----------------------------------------------------------
+        color = colors[int(label.item()) % len(colors)]
+        
+        for kpt_idx, kpt_data in enumerate(kpt):
+            kx, ky, conf = kpt_data.cpu().numpy()
+            kx, ky = int(kx), int(ky)
+            
+            if 0 <= kx < w0 and 0 <= ky < h0:
+                cv2.circle(im0_copy, (kx, ky), 3, (0, 255, 0), -1)
+                cv2.putText(im0_copy, str(kpt_idx), (kx+5, ky-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255), 1)
+
+        text_label = f"Class {int(label.item())} {score.item():.2f}"
+        # 라벨 위치를 박스의 첫 번째 점 근처로 설정
+        label_x, label_y = kpt[0, :2].cpu().numpy().astype(int)
+        cv2.putText(im0_copy, text_label, (label_x, label_y-10), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+    
+    return im0_copy
 
 
-def run_inference(image_path, model_path, device='cuda'):
-    # 1. 모델 로드
+# ==========================================
+# 3. Main Inference
+# ==========================================
+import time 
+def run_inference(image_folder, model_path, device='cuda'):
     print(f"Loading model from {model_path}...")
     nkpts = 4
-    # 실제 DINOv3Pose 클래스로 교체해야 합니다.
-    model = DINOv3Pose(backbone='dinov3_convnext_base', nkpts=(nkpts, 3), ncls=7, device=device)
+    
+    # Load model
+    model = DINOv3Pose(backbone='dinov3_convnext_small', nkpts=(nkpts, 3), ncls=10, device=device)
     
     ckpt = torch.load(model_path, map_location=device)
     if 'model_state_dict' in ckpt:
@@ -193,78 +294,103 @@ def run_inference(image_path, model_path, device='cuda'):
     else:
         model.load_state_dict(ckpt)
     
+    # Stride setup
+    if hasattr(model, 'head'):
+        model.head.register_buffer("stride", torch.tensor([8., 16., 32.], device=device))
+        model.head.anchors = torch.empty(0, device=device)
+        model.head.strides = torch.empty(0, device=device)
+
     model.to(device)
     model.eval()
-
-    # 2. 이미지 로드
-    img0 = cv2.imread(image_path) # BGR, 원본 이미지
-    if img0 is None:
-        print("Image Not Found")
-        return
-
-    # 3. 전처리 (Letterbox)
-    # 640x640으로 리사이즈하며 비율 유지, 빈 공간은 패딩
-    img, ratio, pad = letterbox(img0, new_shape=640, stride=32, auto=False)
     
-    # HWC -> CHW, BGR -> RGB
-    img = img.transpose((2, 0, 1))[::-1]
-    img = np.ascontiguousarray(img)
+    print(f"Model loaded successfully. Processing images from {image_folder}...")
+    print(f"Number of keypoints: {nkpts}\n")
+    
+    image_files = natsort.natsorted([f for f in os.listdir(image_folder) 
+                                     if f.lower().endswith(('.jpg', '.png', '.jpeg', '.bmp'))])
+    
+    if not image_files:
+        print(f"No images found in {image_folder}")
+        return
+    
+    print(f"Found {len(image_files)} images to process\n")
 
-    img_tensor = torch.from_numpy(img).to(device).float()
-    img_tensor /= 255.0
-    if len(img_tensor.shape) == 3:
-        img_tensor = img_tensor[None] 
+    for img_idx, filename in enumerate(image_files):
+        image_path = os.path.join(image_folder, filename)
+        
+        # Load image
+        img0 = cv2.imread(image_path)
+        if img0 is None:
+            print(f"⚠ Failed to load: {filename}")
+            continue
 
-    # 4. 추론
-    print("Running inference...")
-    with torch.no_grad():
-        pred = model(img_tensor)
-        if isinstance(pred, tuple): pred = pred[0]
+        print(f"\n[{img_idx+1}/{len(image_files)}] Processing: {filename}")
+        
+        # Preprocess
+        img_tensor = preprocess_simple(img0, 640, device)
 
-    # 5. NMS
-    pred_nms = non_max_suppression_pose(pred, conf_thres=0.1, iou_thres=0.45, nc=10, nk=nkpts*3)
+        # Inference
+        with torch.no_grad():
+            start = time.time()
+            pred = model(img_tensor)
+            if isinstance(pred, tuple):
+                pred = pred[0]
 
+        print(f"[DEBUG] Raw prediction shape: {pred[0].shape if isinstance(pred, list) else pred.shape}")
 
-    # 6. 좌표 복원 및 시각화 [여기가 핵심입니다!]
-    for i, det in enumerate(pred_nms):
-        im0_copy = img0.copy() # 원본 이미지 복사 (그리기 용)
-        # 이제 인덱싱(det[:, :4]) 대신 키값으로 접근 가능
-        boxes = det['boxes']
-        scores = det['scores']
-        labels = det['labels']
-        keypoints = det['keypoints'] # 이미 (N, 4, 3)으로 reshape 되어 있음
-        if len(boxes) > 0:
-            # scale_coords 등에 넣을 때도 편리함
-            boxes = scale_coords(img_tensor.shape[2:], boxes, img0.shape).round()
-            # keypoints는 flatten해서 넣거나 scale_kpts 함수를 (N, K, 3) 지원하게 수정해서 사용
-            # 기존 scale_kpts를 쓴다면:
-            flat_kpts = keypoints.reshape(len(boxes), -1)
-            flat_kpts = scale_kpts(flat_kpts, img_tensor.shape[2:], img0.shape).round()
-            keypoints = flat_kpts.reshape(len(boxes), -1, 3)
+        # NMS (pass nkpts parameter!)
+        pred_nms = non_max_suppression_pose(
+            pred, 
+            conf_thres=0.5, 
+            iou_thres=0.5, 
+            nc=10, 
+            nkpts=nkpts   # number of keypoints
+        )
+        print("inference time :", time.time() - start)
 
-            # 복원된 좌표로 그리기
-            for box, score, label, kpt in zip(boxes, scores, labels, keypoints):
-                # 박스 그리기
-                p1, p2 = (int(box[0]), int(box[1])), (int(box[2]), int(box[3]))
-                cv2.rectangle(im0_copy, p1, p2, (0, 0, 255), 2)
-                cv2.putText(im0_copy, str(label), (int(box[0]), int(box[1])-10), 0, 0.5, (255, 255, 255), 1, lineType=cv2.LINE_AA)
+        # Visualization
+        for batch_idx, res in enumerate(pred_nms):
+            # Scale coordinates to original image size
+            if res['keypoints'].shape[0] > 0:
                 
-                for kpts in kpt:
-                    # 키포인트 그리기
-                    plot_skeleton(im0_copy, kpts.cpu().numpy(), steps=3)
-
-        # 결과 출력
-        cv2.imshow('DINOv3 Pose Result', im0_copy)
-        # 'q'를 누르면 종료
-        if cv2.waitKey(0) & 0xFF == ord('q'):
-            break
+                h0, w0 = img0.shape[:2]
+                sx, sy = w0 / 640, h0 / 640
+                
+                # Scale keypoints
+                res['keypoints'][..., 0] *= sx
+                res['keypoints'][..., 1] *= sy
+            
+            # Draw detections (pass nkpts!)
+            im0_result = draw_detections(img0, res, nkpts=nkpts, conf_threshold=0.5)
+            
+            # Update display
+            cv2.imshow('DINOv3 Pose Result', im0_result)
+            
+            key = cv2.waitKey(0) & 0xFF
+            if key == ord('q'):
+                print("Exiting...")
+                cv2.destroyAllWindows()
+                return
+            elif key == ord('s'):
+                # Save result
+                output_filename = f"result_{filename}"
+                cv2.imwrite(output_filename, im0_result)
+                print(f"  ✓ Saved: {output_filename}")
 
     cv2.destroyAllWindows()
+    print("\n✓ Inference completed!")
 
 if __name__ == '__main__':
-    # 경로를 실제 파일 위치로 수정해주세요.
-    # IMG_PATH = './frame_2.jpg' 
-    IMG_PATH = './examples/00017.png' 
-    MODEL_PATH = './weights/best.pt' 
+    # IMG_PATH = '/media/otter/otterHD/pallet_data/data_yolo/clear_data/train/sampling_500/images'
+    IMG_PATH = '/media/otter/otterHD/AXData/raw_data/images'
+
+    MODEL_PATH = './weights/best.pt'
     
-    run_inference(IMG_PATH, MODEL_PATH)
+    if not os.path.exists(IMG_PATH):
+        print(f"❌ Image folder not found: {IMG_PATH}")
+    elif not os.path.exists(MODEL_PATH):
+        print(f"❌ Model file not found: {MODEL_PATH}")
+    else:
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        print(f"Using device: {device}")
+        run_inference(IMG_PATH, MODEL_PATH, device=device)

@@ -10,3 +10,9 @@
 [submodule "HPE/thirdparty/MinkowskiEngine"]
 	path = HPE/thirdparty/MinkowskiEngine
 	url = https://github.com/NVIDIA/MinkowskiEngine.git
+[submodule "pose/pose/model/thirdparty/pytorch-image-models"]
+	path = pose/pose/model/thirdparty/pytorch-image-models
+	url = https://github.com/huggingface/pytorch-image-models
+[submodule "pose/pose/model/thirdparty/dinov3"]
+	path = pose/pose/model/thirdparty/dinov3
+	url = https://github.com/facebookresearch/dinov3.git
